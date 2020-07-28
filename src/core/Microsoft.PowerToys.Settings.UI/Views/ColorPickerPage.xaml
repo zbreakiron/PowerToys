@@ -77,7 +77,12 @@
                 <ComboBoxItem Content="RGB - RGB(100, 50, 75)"/>
             </ComboBox>
 
-               <!--
+            <CheckBox x:Uid="ColorPicker_OpenEditor" 
+                          IsChecked="{Binding OpenEditor, Mode=TwoWay}"
+                          Margin="{StaticResource SmallTopMargin}"
+                          IsEnabled="{Binding IsEnabled}"/>
+            
+            <!--
             Disabling this until we have a safer way to reset cursor as 
             we can hit a state where the cursor doesn't reset
            

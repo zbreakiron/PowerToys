@@ -76,6 +76,24 @@ namespace Microsoft.PowerToys.Settings.UI.ViewModels
             }
         }
 
+        public bool OpenEditor
+        {
+            get
+            {
+                return _colorPickerSettings.Properties.OpenEditor;
+            }
+
+            set
+            {
+                if (_colorPickerSettings.Properties.OpenEditor != value)
+                {
+                    _colorPickerSettings.Properties.OpenEditor = value;
+                    OnPropertyChanged(nameof(OpenEditor));
+                    NotifySettingsChanged();
+                }
+            }
+        }
+
         public HotkeySettings ActivationShortcut
         {
             get

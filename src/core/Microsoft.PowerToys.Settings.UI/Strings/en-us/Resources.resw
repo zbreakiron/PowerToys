@@ -206,6 +206,9 @@
   <data name="ColorPicker_ChangeCursor.Content" xml:space="preserve">
     <value>Change cursor when picking a color</value>
   </data>
+  <data name="ColorPicker_OpenEditor.Content" xml:space="preserve">
+    <value>Open color editor after picking a color</value>
+  </data>
   <data name="ColorPicker_CopiedColorRepresentation.Header" xml:space="preserve">
     <value>Copied color representation</value>
   </data>

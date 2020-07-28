@@ -6,6 +6,8 @@ using ColorPicker.Helpers;
 using System.Threading.Tasks;
 using System.Threading;
 using System;
+using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace ColorPicker.Settings
 {
@@ -16,6 +18,7 @@ namespace ColorPicker.Settings
         private const string DefaultActivationShortcut = "Ctrl + Break";
         private const int MaxNumberOfRetry = 5;
         private FileSystemWatcher _watcher;
+        private bool _loadingColors;
 
         private object _loadingSettingsLock = new object();
 
@@ -25,7 +28,9 @@ namespace ColorPicker.Settings
             ChangeCursor = new SettingItem<bool>(true);
             ActivationShortcut = new SettingItem<string>(DefaultActivationShortcut);
             CopiedColorRepresentation = new SettingItem<ColorRepresentationType>(ColorRepresentationType.HEX);
-
+            OpenEditor = new SettingItem<bool>(false);
+            ColorHistory = new ObservableCollection<string>();
+            ColorHistory.CollectionChanged += ColorHistory_CollectionChanged;
             LoadSettingsFromJson();
             _watcher = Helper.GetFileWatcher(ColorPickerModuleName, "settings.json", LoadSettingsFromJson);
         }
@@ -34,7 +39,21 @@ namespace ColorPicker.Settings
 
         public SettingItem<bool> ChangeCursor { get; private set; }
 
-        public SettingItem<ColorRepresentationType> CopiedColorRepresentation { get; set; }
+        public SettingItem<ColorRepresentationType> CopiedColorRepresentation { get; private set; }
+
+        public SettingItem<bool> OpenEditor { get; private set; }
+
+        public ObservableCollection<string> ColorHistory { get; private set; }
+
+        private void ColorHistory_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (!_loadingColors)
+            {
+                var settings = SettingsUtils.GetSettings<ColorPickerSettings>(ColorPickerModuleName);
+                settings.Properties.ColorHistory = ColorHistory.ToList();
+                settings.Save();
+            }
+        }
 
         private void LoadSettingsFromJson()
         {
@@ -63,6 +82,20 @@ namespace ColorPicker.Settings
                                 ChangeCursor.Value = settings.Properties.ChangeCursor;
                                 ActivationShortcut.Value = settings.Properties.ActivationShortcut.ToString();
                                 CopiedColorRepresentation.Value = settings.Properties.CopiedColorRepresentation;
+                                OpenEditor.Value = settings.Properties.OpenEditor;
+
+                                if(settings.Properties.ColorHistory == null)
+                                {
+                                    settings.Properties.ColorHistory = new System.Collections.Generic.List<string>();
+                                }
+                                _loadingColors = true;
+                                ColorHistory.Clear();
+                                foreach(var item in settings.Properties.ColorHistory)
+                                {
+                                    ColorHistory.Add(item);
+                                }
+
+                                _loadingColors = false;
                             }
 
                             retry = false;

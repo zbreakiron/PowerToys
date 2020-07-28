@@ -13,6 +13,8 @@ using ColorPicker.ViewModelContracts;
 using ColorPicker.Telemetry;
 using Microsoft.PowerToys.Settings.UI.Lib;
 using Microsoft.PowerToys.Telemetry;
+using ColorPicker.Controls;
+using System.Threading.Tasks;
 
 namespace ColorPicker.ViewModels
 {
@@ -107,35 +109,26 @@ namespace ColorPicker.ViewModels
                     break;
             }
 
-            CopyToClipboard(colorRepresentationToCopy);
+            ClipboardHelper.CopyToClipboard(colorRepresentationToCopy);
+
+            _userSettings.ColorHistory.Insert(0, GetColorString());
 
             _appStateHandler.HideColorPicker();
             PowerToysTelemetry.Log.WriteEvent(new ColorPickerShowEvent());
+            if (_userSettings.OpenEditor.Value)
+            {
+                Task.Run(async () =>
+                {
+                    await Task.Delay(10);
+                    _appStateHandler.ShowEditor();
+                });
+            }
         }
 
-        private static void CopyToClipboard(string colorRepresentationToCopy)
+        private string GetColorString()
         {
-            if (!string.IsNullOrEmpty(colorRepresentationToCopy))
-            {
-                // nasty hack - sometimes clipboard can be in use and it will raise and exception
-                for (int i = 0; i < 10; i++)
-                {
-                    try
-                    {
-                        Clipboard.SetText(colorRepresentationToCopy);
-                        break;
-                    }
-                    catch (COMException ex)
-                    {
-                        const uint CLIPBRD_E_CANT_OPEN = 0x800401D0;
-                        if ((uint)ex.ErrorCode != CLIPBRD_E_CANT_OPEN)
-                        {
-                            Logger.LogError("Failed to set text into clipboard", ex);
-                        }
-                    }
-                    System.Threading.Thread.Sleep(10);
-                }
-            }
+            var color = ((SolidColorBrush)ColorBrush).Color;
+            return color.A + "|" + color.R + "|" + color.G + "|" + color.B;
         }
 
         private void MouseInfoProvider_OnMouseWheel(object sender, Tuple<Point, bool> e)

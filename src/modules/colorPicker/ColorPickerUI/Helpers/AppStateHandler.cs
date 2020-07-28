@@ -1,15 +1,24 @@
-﻿using System;
+﻿using ColorPicker.Controls;
+using ColorPicker.Settings;
+using System;
 using System.ComponentModel.Composition;
+using System.Linq;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace ColorPicker.Helpers
 {
     [Export(typeof(AppStateHandler))]
     public class AppStateHandler
     {
+        private Dispatcher _dispatcher;
+        private readonly IUserSettings _userSettings;
+
         [ImportingConstructor]
-        public AppStateHandler()
+        public AppStateHandler(IUserSettings userSettings)
         {
+            _dispatcher = Application.Current.MainWindow.Dispatcher;
+            _userSettings = userSettings;
             Application.Current.MainWindow.Closed += MainWindow_Closed;
         }
 
@@ -31,6 +40,15 @@ namespace ColorPicker.Helpers
             Application.Current.MainWindow.Opacity = 0;
             Application.Current.MainWindow.Visibility = Visibility.Collapsed;
             AppHidden?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void ShowEditor()
+        {
+            _dispatcher.Invoke(() =>
+            {
+                ColorPickerEditorWindow editor = new ColorPickerEditorWindow(_userSettings, this);
+                editor.Show();
+            });
         }
 
         public static void SetTopMost()

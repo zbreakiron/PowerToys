@@ -1,4 +1,5 @@
 ﻿using Microsoft.PowerToys.Settings.UI.Lib;
+using System.Collections.ObjectModel;
 
 namespace ColorPicker.Settings
 {
@@ -8,6 +9,10 @@ namespace ColorPicker.Settings
 
         SettingItem<bool> ChangeCursor { get; }
 
-        SettingItem<ColorRepresentationType> CopiedColorRepresentation { get; set; }
+        SettingItem<ColorRepresentationType> CopiedColorRepresentation { get; }
+
+        SettingItem<bool> OpenEditor { get; }
+
+        ObservableCollection<string> ColorHistory { get; }
     }
 }
