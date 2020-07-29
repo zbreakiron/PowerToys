@@ -86,8 +86,8 @@ namespace ColorPickerEditorUI
             Gradient1.Fill = new SolidColorBrush(ColorHelper.FromHsv(Math.Min(SelectedHSVColor.H + hueCoeficient * 8, 360), s, Math.Min(SelectedHSVColor.V + 0.3, 1)));
             Gradient2.Fill = new SolidColorBrush(ColorHelper.FromHsv(Math.Min(SelectedHSVColor.H + hueCoeficient * 4, 360), s, Math.Min(SelectedHSVColor.V + 0.15, 1)));
 
-            Gradient3.Fill = new SolidColorBrush(ColorHelper.FromHsv(Math.Min(SelectedHSVColor.H - hueCoeficient2 * 4, 360), s, Math.Max(SelectedHSVColor.V - 0.2, 0)));
-            Gradient4.Fill = new SolidColorBrush(ColorHelper.FromHsv(Math.Min(SelectedHSVColor.H - hueCoeficient2 * 8, 360), s, Math.Max(SelectedHSVColor.V - 0.3, 0)));
+            Gradient3.Fill = new SolidColorBrush(ColorHelper.FromHsv(Math.Max(SelectedHSVColor.H - hueCoeficient2 * 4, 0), s, Math.Max(SelectedHSVColor.V - 0.2, 0)));
+            Gradient4.Fill = new SolidColorBrush(ColorHelper.FromHsv(Math.Max(SelectedHSVColor.H - hueCoeficient2 * 8, 0), s, Math.Max(SelectedHSVColor.V - 0.3, 0)));
         }
 
         private void CopyToClipboard(object sender, string colorCode)
