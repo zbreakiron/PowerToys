@@ -7,6 +7,7 @@ using System.Threading;
 using System.Windows;
 using ColorPicker.Helpers;
 using ColorPicker.Mouse;
+using interop;
 using ManagedCommon;
 
 namespace ColorPickerUI
@@ -19,6 +20,7 @@ namespace ColorPickerUI
         private Mutex _instanceMutex = null;
         private static string[] _args;
         private int _powerToysPid;
+        private TwoWayPipeMessageIPCManaged ipcManager;
 
         [STAThread]
         public static void Main(string[] args)
@@ -55,6 +57,12 @@ namespace ColorPickerUI
                 _ = int.TryParse(_args[0], out _powerToysPid);
             }
 
+            if (_args.Length > 2)
+            {
+                ipcManager = new TwoWayPipeMessageIPCManaged(_args[2], _args[1], InvokeDelegate);
+                ipcManager.Start();
+            }
+
             RunnerHelper.WaitForPowerToysRunner(_powerToysPid, () =>
             {
                 Environment.Exit(0);
@@ -78,6 +86,15 @@ namespace ColorPickerUI
         {
             Logger.LogError("Unhandled exception", (e.ExceptionObject is Exception) ? (e.ExceptionObject as Exception) : new Exception());
             CursorManager.RestoreOriginalCursors();
+        }
+
+        private void InvokeDelegate(string s)
+        {
+            if (s == "invoke")
+            {
+                // Shouldn't be done like this
+                new AppStateHandler().ShowColorPicker();
+            }
         }
     }
 }

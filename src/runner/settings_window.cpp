@@ -12,6 +12,7 @@
 #include "common/common.h"
 #include "restart_elevated.h"
 #include "update_utils.h"
+#include "root_kbhook.h"
 
 #include <common/json.h>
 #include <common\settings_helpers.cpp>
@@ -95,9 +96,17 @@ void dispatch_json_action_to_module(const json::JsonObject& powertoys_configs)
 
 void send_json_config_to_module(const std::wstring& module_key, const std::wstring& settings)
 {
-    if (modules().find(module_key) != modules().end())
+    auto moduleIt = modules().find(module_key);
+    if (moduleIt != modules().end())
     {
-        modules().at(module_key)->set_config(settings.c_str());
+        moduleIt->second->set_config(settings.c_str());
+        RootKeyboardHook::Hotkey* hotkey = moduleIt->second->get_invoke_hotkey();
+        if (hotkey)
+        {
+            RootKeyboardHook::SetHotkeyAction(module_key, *hotkey, [moduleIt]() {
+                moduleIt->second->invoke();
+            });
+        }
     }
 }
 

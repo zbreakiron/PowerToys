@@ -29,6 +29,18 @@
 class PowertoyModuleIface
 {
 public:
+    /* Describes a hotkey */
+    struct Hotkey
+    {
+        bool win;
+        bool ctrl;
+        bool shift;
+        bool alt;
+        unsigned char key;
+
+        std::strong_ordering operator<=>(const Hotkey&) const = default;
+    };
+
     /* Returns the name of the PowerToy, this will be cached by the runner. */
     virtual const wchar_t* get_name() = 0;
     /* Fills a buffer with the available configuration settings.
@@ -49,6 +61,12 @@ public:
     virtual bool is_enabled() = 0;
     /* Destroy the PowerToy and free all memory. */
     virtual void destroy() = 0;
+
+    /* Optional virtual method. Called when the runner wants to know the invocation hotkey.
+    * Return NULL or don't override the method if you don't want to use a hotkey. */
+    virtual Hotkey* get_invoke_hotkey() { return NULL; }
+    /* Optional virtual method. The runner will call this method when the hotkey is pressed. */
+    virtual void invoke() {}
 };
 
 /*

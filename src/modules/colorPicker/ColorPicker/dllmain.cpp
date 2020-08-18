@@ -6,6 +6,7 @@
 #include "resource.h"
 #include <common\settings_objects.h>
 #include <common\os-detect.h>
+#include <common/two_way_pipe_message_ipc.h>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -26,6 +27,20 @@ BOOL APIENTRY DllMain(HMODULE hModule,
     return TRUE;
 }
 
+namespace NonLocalizable
+{
+    const std::wstring_view Properties{ L"properties" };
+    const std::wstring_view ActivationShortcut{ L"ActivationShortcut" };
+    const std::wstring_view Win{ L"win" };
+    const std::wstring_view Ctrl{ L"ctrl" };
+    const std::wstring_view Alt{ L"alt" };
+    const std::wstring_view Shift{ L"shift" };
+    const std::wstring_view Code{ L"code" };
+    const std::wstring_view OutboundPipeName { LR"(\\.\pipe\baef6da3-ce93-4c85-a1fd-1a4da3e6832d)" };
+    const std::wstring_view InboundPipeName{ LR"(\\.\pipe\c9c4a0c8-459b-48cd-82eb-1464ebe949f1)" };
+    const std::wstring_view Invoke{ L"invoke" };
+}
+
 struct ModuleSettings
 {
 } g_settings;
@@ -41,6 +56,10 @@ private:
 
     // Time to wait for process to close after sending WM_CLOSE signal
     static const int MAX_WAIT_MILLISEC = 10000;
+
+    std::unique_ptr<Hotkey> hotkey;
+
+    std::unique_ptr<TwoWayPipeMessageIPC> ipcManager;
 
 public:
     ColorPicker()
@@ -93,6 +112,16 @@ public:
             PowerToysSettings::PowerToyValues values =
                 PowerToysSettings::PowerToyValues::from_json_string(config);
 
+            // Set the shortcut hotkey if present.
+            auto shortcut = values.get_raw_json().GetNamedObject(NonLocalizable::Properties).GetNamedObject(NonLocalizable::ActivationShortcut);
+            hotkey = std::make_unique<Hotkey>(Hotkey{
+                .win = shortcut.GetNamedBoolean(NonLocalizable::Win),
+                .ctrl = shortcut.GetNamedBoolean(NonLocalizable::Ctrl),
+                .shift = shortcut.GetNamedBoolean(NonLocalizable::Shift),
+                .alt = shortcut.GetNamedBoolean(NonLocalizable::Alt),
+                .key = static_cast<unsigned char>(shortcut.GetNamedNumber(NonLocalizable::Code))
+            });
+          
             // If you don't need to do any custom processing of the settings, proceed
             // to persists the values calling:
             values.save_to_settings_file();
@@ -110,10 +139,19 @@ public:
         // use only with new settings?
         if (UseNewSettings())
         {
+            ipcManager = std::make_unique<TwoWayPipeMessageIPC>(
+                std::wstring{ NonLocalizable::InboundPipeName }, 
+                std::wstring{ NonLocalizable::OutboundPipeName },
+                nullptr);
+
             unsigned long powertoys_pid = GetCurrentProcessId();
 
             std::wstring executable_args = L"";
             executable_args.append(std::to_wstring(powertoys_pid));
+            executable_args.append(L" ");
+            executable_args.append(NonLocalizable::InboundPipeName);
+            executable_args.append(L" ");
+            executable_args.append(NonLocalizable::OutboundPipeName);
 
             SHELLEXECUTEINFOW sei{ sizeof(sei) };
             sei.fMask = { SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI };
@@ -133,6 +171,7 @@ public:
         if (m_enabled)
         {
             TerminateProcess(m_hProcess, 1);
+            ipcManager = nullptr;
         }
 
         m_enabled = false;
@@ -141,6 +180,19 @@ public:
     virtual bool is_enabled() override
     {
         return m_enabled;
+    }
+
+    virtual Hotkey* get_invoke_hotkey() override 
+    {
+        return hotkey.get();
+    }
+
+    virtual void invoke() override
+    {
+        if (m_enabled)
+        {
+            ipcManager->send(std::wstring{ NonLocalizable::Invoke });
+        }
     }
 };
 
