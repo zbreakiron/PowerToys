@@ -7,7 +7,8 @@
              xmlns:viewModel="clr-namespace:ColorPicker.ViewModels"
              mc:Ignorable="d" 
              d:DesignHeight="50" d:DesignWidth="180" 
-             d:DataContext="{d:DesignInstance viewModel:MainViewModel, IsDesignTimeCreatable=True}">
+             d:DataContext="{d:DesignInstance viewModel:MainViewModel, IsDesignTimeCreatable=True}"
+             Width="180" Height="50">
     <Grid Background="Transparent" >
         <Grid>
             <Grid.ColumnDefinitions>

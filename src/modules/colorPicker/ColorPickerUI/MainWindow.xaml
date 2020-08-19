@@ -7,10 +7,36 @@
         mc:Ignorable="d"
         xmlns:e="http://schemas.microsoft.com/expression/2010/interactivity"
         xmlns:behaviors="clr-namespace:ColorPicker.Behaviors"
-        Title="Color Picker" Height="50" Width="180" WindowStyle="None" Opacity="0.01" ShowInTaskbar="False" ResizeMode="NoResize" Topmost="True" Background="Transparent" AllowsTransparency="True">
+        Title="Color Picker" Height="100" Width="180" WindowStyle="None" Opacity="0.01" ShowInTaskbar="False" ResizeMode="NoResize" Topmost="True" Background="Transparent" AllowsTransparency="True">
     <e:Interaction.Behaviors>
         <behaviors:ChangeWindowPositionBehavior/>
         <behaviors:AppearAnimationBehavior/>
     </e:Interaction.Behaviors>
-    <ContentControl x:Name="MainView" Content="{Binding MainViewModel}"/>
+    
+    <Grid>
+        <Border CornerRadius="5" Margin="70,0,0,0" Width="109" Height="30" Background="#202020" BorderThickness="0" BorderBrush="Transparent">
+            <Border.Triggers>
+                <EventTrigger RoutedEvent="Border.Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <ThicknessAnimation Storyboard.TargetProperty="Margin" BeginTime="00:00:02" To="70,62,0,0" Duration="00:00:00.3">
+                                <ThicknessAnimation.EasingFunction>
+                                    <SineEase EasingMode="EaseOut"/>
+                                </ThicknessAnimation.EasingFunction>
+                            </ThicknessAnimation>
+
+                            <ThicknessAnimation Storyboard.TargetProperty="Margin" BeginTime="00:00:17" To="70,0,0,0" Duration="00:00:00.3">
+                                <ThicknessAnimation.EasingFunction>
+                                    <SineEase EasingMode="EaseOut"/>
+                                </ThicknessAnimation.EasingFunction>
+                            </ThicknessAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Border.Triggers>
+            <TextBlock Text="Scroll to zoom" Margin="0,5,0,0" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" FontSize="14" FontWeight="Normal"/>
+        </Border>
+
+        <ContentControl x:Name="MainView" Content="{Binding MainViewModel}"/>
+    </Grid>
 </Window>
