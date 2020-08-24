@@ -36,9 +36,8 @@ namespace NonLocalizable
     const std::wstring_view Alt{ L"alt" };
     const std::wstring_view Shift{ L"shift" };
     const std::wstring_view Code{ L"code" };
-    const std::wstring_view OutboundPipeName { LR"(\\.\pipe\baef6da3-ce93-4c85-a1fd-1a4da3e6832d)" };
-    const std::wstring_view InboundPipeName{ LR"(\\.\pipe\c9c4a0c8-459b-48cd-82eb-1464ebe949f1)" };
     const std::wstring_view Invoke{ L"invoke" };
+    const std::wstring_view ShowArg{ L"--show" };
 }
 
 struct ModuleSettings
@@ -59,7 +58,24 @@ private:
 
     std::unique_ptr<Hotkey> hotkey;
 
-    std::unique_ptr<TwoWayPipeMessageIPC> ipcManager;
+    void RunProcess()
+    {
+        unsigned long powertoys_pid = GetCurrentProcessId();
+
+        std::wstring executable_args = L"";
+        executable_args.append(std::to_wstring(powertoys_pid));
+        executable_args += L' ';
+        executable_args += NonLocalizable::ShowArg;
+
+        SHELLEXECUTEINFOW sei{ sizeof(sei) };
+        sei.fMask = { SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI };
+        sei.lpFile = L"modules\\ColorPicker\\ColorPicker.exe";
+        sei.nShow = SW_SHOWNORMAL;
+        sei.lpParameters = executable_args.data();
+        ShellExecuteExW(&sei);
+
+        m_hProcess = sei.hProcess;
+    }
 
 public:
     ColorPicker()
@@ -139,29 +155,6 @@ public:
         // use only with new settings?
         if (UseNewSettings())
         {
-            ipcManager = std::make_unique<TwoWayPipeMessageIPC>(
-                std::wstring{ NonLocalizable::InboundPipeName }, 
-                std::wstring{ NonLocalizable::OutboundPipeName },
-                nullptr);
-
-            unsigned long powertoys_pid = GetCurrentProcessId();
-
-            std::wstring executable_args = L"";
-            executable_args.append(std::to_wstring(powertoys_pid));
-            executable_args.append(L" ");
-            executable_args.append(NonLocalizable::InboundPipeName);
-            executable_args.append(L" ");
-            executable_args.append(NonLocalizable::OutboundPipeName);
-
-            SHELLEXECUTEINFOW sei{ sizeof(sei) };
-            sei.fMask = { SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI };
-            sei.lpFile = L"modules\\ColorPicker\\ColorPicker.exe";
-            sei.nShow = SW_SHOWNORMAL;
-            sei.lpParameters = executable_args.data();
-            ShellExecuteExW(&sei);
-
-            m_hProcess = sei.hProcess;
-
             m_enabled = true;
         }
     };
@@ -171,7 +164,6 @@ public:
         if (m_enabled)
         {
             TerminateProcess(m_hProcess, 1);
-            ipcManager = nullptr;
         }
 
         m_enabled = false;
@@ -191,7 +183,7 @@ public:
     {
         if (m_enabled)
         {
-            ipcManager->send(std::wstring{ NonLocalizable::Invoke });
+            RunProcess();
         }
     }
 };

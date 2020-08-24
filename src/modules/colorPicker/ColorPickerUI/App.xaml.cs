@@ -7,7 +7,6 @@ using System.Threading;
 using System.Windows;
 using ColorPicker.Helpers;
 using ColorPicker.Mouse;
-using interop;
 using ManagedCommon;
 
 namespace ColorPickerUI
@@ -20,7 +19,6 @@ namespace ColorPickerUI
         private Mutex _instanceMutex = null;
         private static string[] _args;
         private int _powerToysPid;
-        private TwoWayPipeMessageIPCManaged ipcManager;
 
         [STAThread]
         public static void Main(string[] args)
@@ -57,10 +55,12 @@ namespace ColorPickerUI
                 _ = int.TryParse(_args[0], out _powerToysPid);
             }
 
-            if (_args.Length > 2)
+            if (_args.Length == 2)
             {
-                ipcManager = new TwoWayPipeMessageIPCManaged(_args[2], _args[1], InvokeDelegate);
-                ipcManager.Start();
+                if (_args[1] == "--show")
+                {
+                    // TODO: Show app
+                }
             }
 
             RunnerHelper.WaitForPowerToysRunner(_powerToysPid, () =>
