@@ -12,7 +12,7 @@
 #include "common/common.h"
 #include "restart_elevated.h"
 #include "update_utils.h"
-#include "root_kbhook.h"
+#include "centralized_kb_hook.h"
 
 #include <common/json.h>
 #include <common\settings_helpers.cpp>
