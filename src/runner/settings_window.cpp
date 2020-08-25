@@ -100,11 +100,12 @@ void send_json_config_to_module(const std::wstring& module_key, const std::wstri
     if (moduleIt != modules().end())
     {
         moduleIt->second->set_config(settings.c_str());
-        RootKeyboardHook::Hotkey* hotkey = moduleIt->second->get_invoke_hotkey();
+        CentralizedKeyboardHook::Hotkey* hotkey = moduleIt->second->get_invoke_hotkey();
         if (hotkey)
         {
-            RootKeyboardHook::SetHotkeyAction(module_key, *hotkey, [moduleIt]() {
+            CentralizedKeyboardHook::SetHotkeyAction(module_key, *hotkey, [moduleIt]() {
                 moduleIt->second->invoke();
+                return true;
             });
         }
     }
