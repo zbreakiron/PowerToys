@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using interop;
 using Microsoft.PowerLauncher.Telemetry;
 using Microsoft.PowerToys.Telemetry;
@@ -130,7 +131,7 @@ namespace PowerLauncher.ViewModel
                 }
                 else
                 {
-                    MainWindowVisibility = Visibility.Collapsed;
+                    Hide();
                 }
             });
 
@@ -202,7 +203,7 @@ namespace PowerLauncher.ViewModel
                         // SelectedItem returns null if selection is empty.
                         if (result != null && result.Action != null)
                         {
-                            MainWindowVisibility = Visibility.Collapsed;
+                            Hide();
 
                             Application.Current.Dispatcher.Invoke(() =>
                             {
@@ -726,7 +727,7 @@ namespace PowerLauncher.ViewModel
             });
         }
 
-        private void ToggleWox()
+        public void ToggleWox()
         {
             if (MainWindowVisibility != Visibility.Visible)
             {
@@ -734,7 +735,26 @@ namespace PowerLauncher.ViewModel
             }
             else
             {
-                MainWindowVisibility = Visibility.Collapsed;
+                if (_settings.ClearInputOnLaunch && Results.Visibility == Visibility.Visible)
+                {
+                    ClearQueryCommand.Execute(null);
+                    Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+                    {
+                        MainWindowVisibility = Visibility.Collapsed;
+                    }));
+                }
+                else
+                {
+                    MainWindowVisibility = Visibility.Collapsed;
+                }
+            }
+        }
+
+        public void Hide()
+        {
+            if (MainWindowVisibility != Visibility.Collapsed)
+            {
+                ToggleWox();
             }
         }
 
