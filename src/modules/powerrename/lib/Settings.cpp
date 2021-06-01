@@ -1,12 +1,13 @@
 #include "pch.h"
 #include "Settings.h"
 #include "PowerRenameInterfaces.h"
-#include "settings_helpers.h"
+#include <common/SettingsAPI/settings_helpers.h>
 
 #include <filesystem>
 #include <commctrl.h>
 #include <algorithm>
 #include <fstream>
+#include <dll/PowerRenameConstants.h>
 
 namespace
 {
@@ -30,6 +31,7 @@ namespace
     const wchar_t c_mruEnabled[] = L"MRUEnabled";
     const wchar_t c_mruList[] = L"MRUList";
     const wchar_t c_insertionIdx[] = L"InsertionIdx";
+    const wchar_t c_useBoostLib[] = L"UseBoostLib";
 
     unsigned int GetRegNumber(const std::wstring& valueName, unsigned int defaultValue)
     {
@@ -59,7 +61,7 @@ namespace
         SetRegNumber(valueName, value ? 1 : 0);
     }
 
-    std::wstring GetRegString(const std::wstring& valueName,const std::wstring& subPath)
+    std::wstring GetRegString(const std::wstring& valueName, const std::wstring& subPath)
     {
         wchar_t value[CSettings::MAX_INPUT_STRING_LEN];
         value[0] = L'\0';
@@ -92,7 +94,7 @@ public:
         pushIdx(0),
         nextIdx(1),
         size(size),
-        jsonFilePath(PTSettingsHelper::get_module_save_folder_location(L"PowerRename") + filePath),
+        jsonFilePath(PTSettingsHelper::get_module_save_folder_location(PowerRenameConstants::ModuleKey) + filePath),
         registryFilePath(regPath)
     {
         items.resize(size);
@@ -120,7 +122,6 @@ private:
     const std::wstring jsonFilePath;
     const std::wstring registryFilePath;
 };
-
 
 void MRUListHandler::Push(const std::wstring& data)
 {
@@ -263,7 +264,9 @@ void MRUListHandler::ParseJson()
                 }
             }
         }
-        catch (const winrt::hresult_error&) { }
+        catch (const winrt::hresult_error&)
+        {
+        }
     }
 }
 
@@ -278,15 +281,21 @@ class CRenameMRU :
 {
 public:
     // IUnknown
-    IFACEMETHODIMP_(ULONG) AddRef();
-    IFACEMETHODIMP_(ULONG) Release();
+    IFACEMETHODIMP_(ULONG)
+    AddRef();
+    IFACEMETHODIMP_(ULONG)
+    Release();
     IFACEMETHODIMP QueryInterface(_In_ REFIID riid, _Outptr_ void** ppv);
 
     // IEnumString
     IFACEMETHODIMP Next(__in ULONG celt, __out_ecount_part(celt, *pceltFetched) LPOLESTR* rgelt, __out_opt ULONG* pceltFetched);
     IFACEMETHODIMP Skip(__in ULONG) { return E_NOTIMPL; }
     IFACEMETHODIMP Reset();
-    IFACEMETHODIMP Clone(__deref_out IEnumString** ppenum) { *ppenum = nullptr;  return E_NOTIMPL; }
+    IFACEMETHODIMP Clone(__deref_out IEnumString** ppenum)
+    {
+        *ppenum = nullptr;
+        return E_NOTIMPL;
+    }
 
     // IPowerRenameMRU
     IFACEMETHODIMP AddMRUString(_In_ PCWSTR entry);
@@ -310,27 +319,30 @@ HRESULT CRenameMRU::CreateInstance(_In_ const std::wstring& filePath, _In_ const
 {
     *ppUnk = nullptr;
     unsigned int maxMRUSize = CSettingsInstance().GetMaxMRUSize();
-    HRESULT hr = maxMRUSize > 0 ? S_OK : E_FAIL;
-    if (SUCCEEDED(hr))
+    HRESULT hr = E_FAIL;
+    if (maxMRUSize > 0)
     {
         CRenameMRU* renameMRU = new CRenameMRU(maxMRUSize, filePath, regPath);
-        hr = renameMRU ? S_OK : E_OUTOFMEMORY;
-        if (SUCCEEDED(hr))
+        hr = E_OUTOFMEMORY;
+        if (renameMRU)
         {
             renameMRU->QueryInterface(IID_PPV_ARGS(ppUnk));
             renameMRU->Release();
+            hr = S_OK;
         }
     }
 
     return hr;
 }
 
-IFACEMETHODIMP_(ULONG) CRenameMRU::AddRef()
+IFACEMETHODIMP_(ULONG)
+CRenameMRU::AddRef()
 {
     return InterlockedIncrement(&refCount);
 }
 
-IFACEMETHODIMP_(ULONG) CRenameMRU::Release()
+IFACEMETHODIMP_(ULONG)
+CRenameMRU::Release()
 {
     unsigned int cnt = InterlockedDecrement(&refCount);
 
@@ -395,7 +407,7 @@ IFACEMETHODIMP CRenameMRU::AddMRUString(_In_ PCWSTR entry)
 
 CSettings::CSettings()
 {
-    std::wstring result = PTSettingsHelper::get_module_save_folder_location(L"PowerRename");
+    std::wstring result = PTSettingsHelper::get_module_save_folder_location(PowerRenameConstants::ModuleKey);
     jsonFilePath = result + std::wstring(c_powerRenameDataFilePath);
     UIFlagsFilePath = result + std::wstring(c_powerRenameUIFlagsFilePath);
     Load();
@@ -405,14 +417,15 @@ void CSettings::Save()
 {
     json::JsonObject jsonData;
 
-    jsonData.SetNamedValue(c_enabled,                 json::value(settings.enabled));
-    jsonData.SetNamedValue(c_showIconOnMenu,          json::value(settings.showIconOnMenu));
+    jsonData.SetNamedValue(c_enabled, json::value(settings.enabled));
+    jsonData.SetNamedValue(c_showIconOnMenu, json::value(settings.showIconOnMenu));
     jsonData.SetNamedValue(c_extendedContextMenuOnly, json::value(settings.extendedContextMenuOnly));
-    jsonData.SetNamedValue(c_persistState,            json::value(settings.persistState));
-    jsonData.SetNamedValue(c_mruEnabled,              json::value(settings.MRUEnabled));
-    jsonData.SetNamedValue(c_maxMRUSize,              json::value(settings.maxMRUSize));
-    jsonData.SetNamedValue(c_searchText,              json::value(settings.searchText));
-    jsonData.SetNamedValue(c_replaceText,             json::value(settings.replaceText));
+    jsonData.SetNamedValue(c_persistState, json::value(settings.persistState));
+    jsonData.SetNamedValue(c_mruEnabled, json::value(settings.MRUEnabled));
+    jsonData.SetNamedValue(c_maxMRUSize, json::value(settings.maxMRUSize));
+    jsonData.SetNamedValue(c_searchText, json::value(settings.searchText));
+    jsonData.SetNamedValue(c_replaceText, json::value(settings.replaceText));
+    jsonData.SetNamedValue(c_useBoostLib, json::value(settings.useBoostLib));
 
     json::to_file(jsonFilePath, jsonData);
     GetSystemTimeAsFileTime(&lastLoadedTime);
@@ -447,15 +460,16 @@ void CSettings::Reload()
 
 void CSettings::MigrateFromRegistry()
 {
-    settings.enabled                 = GetRegBoolean(c_enabled, true);
-    settings.showIconOnMenu          = GetRegBoolean(c_showIconOnMenu, true);
+    settings.enabled = GetRegBoolean(c_enabled, true);
+    settings.showIconOnMenu = GetRegBoolean(c_showIconOnMenu, true);
     settings.extendedContextMenuOnly = GetRegBoolean(c_extendedContextMenuOnly, false); // Disabled by default.
-    settings.persistState            = GetRegBoolean(c_persistState, true);
-    settings.MRUEnabled              = GetRegBoolean(c_mruEnabled, true);
-    settings.maxMRUSize              = GetRegNumber(c_maxMRUSize, 10);
-    settings.flags                   = GetRegNumber(c_flags, 0);
-    settings.searchText              = GetRegString(c_searchText, L"");
-    settings.replaceText             = GetRegString(c_replaceText, L"");
+    settings.persistState = GetRegBoolean(c_persistState, true);
+    settings.MRUEnabled = GetRegBoolean(c_mruEnabled, true);
+    settings.maxMRUSize = GetRegNumber(c_maxMRUSize, 10);
+    settings.flags = GetRegNumber(c_flags, 0);
+    settings.searchText = GetRegString(c_searchText, L"");
+    settings.replaceText = GetRegString(c_replaceText, L"");
+    settings.useBoostLib = false; // Never existed in registry, disabled by default.
 }
 
 void CSettings::ParseJson()
@@ -498,8 +512,14 @@ void CSettings::ParseJson()
             {
                 settings.replaceText = jsonSettings.GetNamedString(c_replaceText);
             }
+            if (json::has(jsonSettings, c_useBoostLib, json::JsonValueType::Boolean))
+            {
+                settings.useBoostLib = jsonSettings.GetNamedBoolean(c_useBoostLib);
+            }
         }
-        catch (const winrt::hresult_error&) { }
+        catch (const winrt::hresult_error&)
+        {
+        }
     }
     GetSystemTimeAsFileTime(&lastLoadedTime);
 }

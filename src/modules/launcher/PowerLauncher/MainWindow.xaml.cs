@@ -4,32 +4,36 @@
 
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Timers;
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
+using interop;
 using Microsoft.PowerLauncher.Telemetry;
 using Microsoft.PowerToys.Telemetry;
 using PowerLauncher.Helper;
+using PowerLauncher.Plugin;
+using PowerLauncher.Telemetry.Events;
 using PowerLauncher.ViewModel;
 using Wox.Infrastructure.UserSettings;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
-using Log = Wox.Infrastructure.Logger.Log;
+using Log = Wox.Plugin.Logger.Log;
 using Screen = System.Windows.Forms.Screen;
 
 namespace PowerLauncher
 {
     public partial class MainWindow : IDisposable
     {
-        private readonly Settings _settings;
+        private readonly PowerToysRunSettings _settings;
         private readonly MainViewModel _viewModel;
         private bool _isTextSetProgrammatically;
         private bool _deletePressed;
         private Timer _firstDeleteTimer = new Timer();
         private bool _coldStateHotkeyPressed;
 
-        public MainWindow(Settings settings, MainViewModel mainVM)
+        public MainWindow(PowerToysRunSettings settings, MainViewModel mainVM)
             : this()
         {
             DataContext = mainVM;
@@ -40,6 +44,21 @@ namespace PowerLauncher
 
             _firstDeleteTimer.Elapsed += CheckForFirstDelete;
             _firstDeleteTimer.Interval = 1000;
+            NativeEventWaiter.WaitForEventLoop(Constants.RunSendSettingsTelemetryEvent(), SendSettingsTelemetry);
+        }
+
+        private void SendSettingsTelemetry()
+        {
+            Log.Info("Send Run settings telemetry", this.GetType());
+            var plugins = PluginManager.AllPlugins.ToDictionary(x => x.Metadata.Name, x => new PluginModel()
+            {
+                Disabled = x.Metadata.Disabled,
+                ActionKeyword = x.Metadata.ActionKeyword,
+                IsGlobal = x.Metadata.IsGlobal,
+            });
+
+            var telemetryEvent = new RunPluginsSettingsEvent(plugins);
+            PowerToysTelemetry.Log.WriteEvent(telemetryEvent);
         }
 
         private void CheckForFirstDelete(object sender, ElapsedEventArgs e)
@@ -161,20 +180,12 @@ namespace PowerLauncher
             _settings.WindowLeft = Left;
         }
 
-        private void OnActivated(object sender, EventArgs e)
-        {
-            if (_settings.ClearInputOnLaunch)
-            {
-                _viewModel.ClearQueryCommand.Execute(null);
-            }
-        }
-
         private void OnDeactivated(object sender, EventArgs e)
         {
             if (_settings.HideWhenDeactivated)
             {
                 // (this.FindResource("OutroStoryboard") as Storyboard).Begin();
-                Hide();
+                _viewModel.Hide();
             }
         }
 
@@ -207,7 +218,7 @@ namespace PowerLauncher
         /// <returns>X co-ordinate of main window top left corner</returns>
         private double WindowLeft()
         {
-            var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            var screen = GetScreen();
             var dip1 = WindowsInteropHelper.TransformPixelsToDIP(this, screen.WorkingArea.X, 0);
             var dip2 = WindowsInteropHelper.TransformPixelsToDIP(this, screen.WorkingArea.Width, 0);
             var left = ((dip2.X - ActualWidth) / 2) + dip1.X;
@@ -216,11 +227,28 @@ namespace PowerLauncher
 
         private double WindowTop()
         {
-            var screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            var screen = GetScreen();
             var dip1 = WindowsInteropHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Y);
             var dip2 = WindowsInteropHelper.TransformPixelsToDIP(this, 0, screen.WorkingArea.Height);
             var top = ((dip2.Y - SearchBox.ActualHeight) / 4) + dip1.Y;
             return top;
+        }
+
+        private Screen GetScreen()
+        {
+            ManagedCommon.StartupPosition position = _settings.StartupPosition;
+            switch (position)
+            {
+                case ManagedCommon.StartupPosition.PrimaryMonitor:
+                    return Screen.PrimaryScreen;
+                case ManagedCommon.StartupPosition.Focus:
+                    IntPtr foregroundWindowHandle = NativeMethods.GetForegroundWindow();
+                    Screen activeScreen = Screen.FromHandle(foregroundWindowHandle);
+                    return activeScreen;
+                case ManagedCommon.StartupPosition.Cursor:
+                default:
+                    return Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+            }
         }
 
         private void Launcher_KeyDown(object sender, KeyEventArgs e)
@@ -313,7 +341,7 @@ namespace PowerLauncher
                     // Hence, there can be a situation where the element index that we want to scroll into view is out of range for it's parent control.
                     // To mitigate this we use the UpdateLayout function, which forces layout update to ensure that the parent element contains the latest properties.
                     // However, it has a performance impact and is therefore not called each time.
-                    Log.Exception("MainWindow", "The parent element layout is not updated yet", ex, "SuggestionsList_SelectionChanged");
+                    Log.Exception("The parent element layout is not updated yet", ex, GetType());
                     listview.UpdateLayout();
                     listview.ScrollIntoView(e.AddedItems[0]);
                 }
@@ -336,8 +364,9 @@ namespace PowerLauncher
         {
             var textBox = (TextBox)sender;
             var text = textBox.Text;
+            var autoCompleteText = SearchBox.AutoCompleteTextBlock.Text;
 
-            if (string.IsNullOrEmpty(text))
+            if (MainViewModel.ShouldAutoCompleteTextBeEmpty(text, autoCompleteText))
             {
                 SearchBox.AutoCompleteTextBlock.Text = string.Empty;
             }

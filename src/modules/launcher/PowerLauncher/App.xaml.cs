@@ -4,20 +4,24 @@
 
 using System;
 using System.Diagnostics;
+using System.Linq;
+using System.Text;
 using System.Windows;
+using interop;
 using ManagedCommon;
 using Microsoft.PowerLauncher.Telemetry;
+using Microsoft.PowerToys.Common.UI;
 using Microsoft.PowerToys.Telemetry;
 using PowerLauncher.Helper;
+using PowerLauncher.Plugin;
 using PowerLauncher.ViewModel;
 using Wox;
-using Wox.Core.Plugin;
 using Wox.Infrastructure;
 using Wox.Infrastructure.Http;
 using Wox.Infrastructure.Image;
-using Wox.Infrastructure.Logger;
 using Wox.Infrastructure.UserSettings;
 using Wox.Plugin;
+using Wox.Plugin.Logger;
 using Stopwatch = Wox.Infrastructure.Stopwatch;
 
 namespace PowerLauncher
@@ -26,57 +30,61 @@ namespace PowerLauncher
     {
         public static PublicAPIInstance API { get; private set; }
 
-        private readonly Alphabet _alphabet = new Alphabet();
-
-        private const string Unique = "PowerLauncher_Unique_Application_Mutex";
         private static bool _disposed;
-        private static int _powerToysPid;
-        private Settings _settings;
+        private PowerToysRunSettings _settings;
         private MainViewModel _mainVM;
         private MainWindow _mainWindow;
         private ThemeManager _themeManager;
         private SettingWindowViewModel _settingsVM;
         private StringMatcher _stringMatcher;
-        private SettingsWatcher _settingsWatcher;
+        private SettingsReader _settingsReader;
 
         [STAThread]
-        public static void Main(string[] args)
+        public static void Main()
         {
-            if (SingleInstance<App>.InitializeAsFirstInstance(Unique))
+            Log.Info($"Starting PowerToys Run with PID={Process.GetCurrentProcess().Id}", typeof(App));
+            if (SingleInstance<App>.InitializeAsFirstInstance())
             {
-                if (args?.Length > 0)
-                {
-                    _ = int.TryParse(args[0], out _powerToysPid);
-                }
-
                 using (var application = new App())
                 {
                     application.InitializeComponent();
+                    NativeEventWaiter.WaitForEventLoop(Constants.RunExitEvent(), () =>
+                    {
+                        Log.Warn("RunExitEvent was signaled. Exiting PowerToys", typeof(App));
+                        ExitPowerToys(application);
+                    });
+
+                    int powerToysPid = GetPowerToysPId();
+                    if (powerToysPid != 0)
+                    {
+                        Log.Info($"Runner pid={powerToysPid}", typeof(App));
+                        RunnerHelper.WaitForPowerToysRunner(powerToysPid, () =>
+                        {
+                            Log.Info($"Runner with pid={powerToysPid} exited. Exiting PowerToys Run", typeof(App));
+                            ExitPowerToys(application);
+                        });
+                    }
+
                     application.Run();
                 }
+            }
+            else
+            {
+                Log.Error("There is already running PowerToys Run instance. Exiting PowerToys Run", typeof(App));
             }
         }
 
         private void OnStartup(object sender, StartupEventArgs e)
         {
-            RunnerHelper.WaitForPowerToysRunner(_powerToysPid, () =>
-            {
-                try
-                {
-                    Dispose();
-                }
-                finally
-                {
-                    Environment.Exit(0);
-                }
-            });
-
+            Log.Info("On Startup.", GetType());
             var bootTime = new System.Diagnostics.Stopwatch();
             bootTime.Start();
-            Stopwatch.Normal("|App.OnStartup|Startup cost", () =>
+            Stopwatch.Normal("App.OnStartup - Startup cost", () =>
             {
-                Log.Info("|App.OnStartup|Begin PowerToys Run startup ----------------------------------------------------");
-                Log.Info($"|App.OnStartup|Runtime info:{ErrorReporting.RuntimeInfo()}");
+                var textToLog = new StringBuilder();
+                textToLog.AppendLine("Begin PowerToys Run startup ----------------------------------------------------");
+                textToLog.AppendLine($"Runtime info:{ErrorReporting.RuntimeInfo()}");
+
                 RegisterAppDomainExceptions();
                 RegisterDispatcherUnhandledException();
 
@@ -85,35 +93,38 @@ namespace PowerLauncher
 
                 _settingsVM = new SettingWindowViewModel();
                 _settings = _settingsVM.Settings;
+                _settings.UsePowerToysRunnerKeyboardHook = e.Args.Contains("--centralized-kb-hook");
 
-                _alphabet.Initialize(_settings);
-                _stringMatcher = new StringMatcher(_alphabet);
+                _stringMatcher = new StringMatcher();
                 StringMatcher.Instance = _stringMatcher;
                 _stringMatcher.UserSettingSearchPrecision = _settings.QuerySearchPrecision;
 
-                PluginManager.LoadPlugins(_settings.PluginSettings);
                 _mainVM = new MainViewModel(_settings);
                 _mainWindow = new MainWindow(_settings, _mainVM);
-                API = new PublicAPIInstance(_settingsVM, _mainVM, _alphabet, _themeManager);
+                API = new PublicAPIInstance(_settingsVM, _mainVM, _themeManager);
+                _settingsReader = new SettingsReader(_settings, _themeManager);
+                _settingsReader.ReadSettings();
+
                 PluginManager.InitializePlugins(API);
 
                 Current.MainWindow = _mainWindow;
                 Current.MainWindow.Title = Constant.ExeFileName;
 
                 // main windows needs initialized before theme change because of blur settings
-                Http.Proxy = _settings.Proxy;
+                HttpClient.Proxy = _settings.Proxy;
 
                 RegisterExitEvents();
 
-                _settingsWatcher = new SettingsWatcher(_settings);
+                _settingsReader.ReadSettingsOnChange();
 
                 _mainVM.MainWindowVisibility = Visibility.Visible;
                 _mainVM.ColdStartFix();
                 _themeManager.ThemeChanged += OnThemeChanged;
-                Log.Info("|App.OnStartup|End PowerToys Run startup ----------------------------------------------------  ");
+                textToLog.AppendLine("End PowerToys Run startup ----------------------------------------------------  ");
 
                 bootTime.Stop();
 
+                Log.Info(textToLog.ToString(), GetType());
                 PowerToysTelemetry.Log.WriteEvent(new LauncherBootEvent() { BootTimeMs = bootTime.ElapsedMilliseconds });
 
                 // [Conditional("RELEASE")]
@@ -123,11 +134,59 @@ namespace PowerLauncher
             });
         }
 
+        private static void ExitPowerToys(App app)
+        {
+            SingleInstance<App>.SingleInstanceMutex.Close();
+
+            try
+            {
+                app.Dispose();
+            }
+            finally
+            {
+                Environment.Exit(0);
+            }
+        }
+
+        private static int GetPowerToysPId()
+        {
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 0; i + 1 < args.Length; i++)
+            {
+                if (args[i] == "-powerToysPid")
+                {
+                    int powerToysPid;
+                    if (int.TryParse(args[i + 1], out powerToysPid))
+                    {
+                        return powerToysPid;
+                    }
+
+                    break;
+                }
+            }
+
+            return 0;
+        }
+
         private void RegisterExitEvents()
         {
-            AppDomain.CurrentDomain.ProcessExit += (s, e) => Dispose();
-            Current.Exit += (s, e) => Dispose();
-            Current.SessionEnding += (s, e) => Dispose();
+            AppDomain.CurrentDomain.ProcessExit += (s, e) =>
+            {
+                Log.Info("AppDomain.CurrentDomain.ProcessExit", GetType());
+                Dispose();
+            };
+
+            Current.Exit += (s, e) =>
+            {
+                Log.Info("Application.Current.Exit", GetType());
+                Dispose();
+            };
+
+            Current.SessionEnding += (s, e) =>
+            {
+                Log.Info("Application.Current.SessionEnding", GetType());
+                Dispose();
+            };
         }
 
         /// <summary>
@@ -168,9 +227,9 @@ namespace PowerLauncher
         {
             if (!_disposed)
             {
-                Stopwatch.Normal("|App.OnExit|Exit cost", () =>
+                Stopwatch.Normal("App.OnExit - Exit cost", () =>
                 {
-                    Log.Info("|App.OnExit| Start PowerToys Run Exit----------------------------------------------------  ");
+                    Log.Info("Start PowerToys Run Exit----------------------------------------------------  ", GetType());
                     if (disposing)
                     {
                         if (_themeManager != null)
@@ -190,7 +249,7 @@ namespace PowerLauncher
                     // TODO: free unmanaged resources (unmanaged objects) and override finalizer
                     // TODO: set large fields to null
                     _disposed = true;
-                    Log.Info("|App.OnExit| End PowerToys Run Exit ----------------------------------------------------  ");
+                    Log.Info("End PowerToys Run Exit ----------------------------------------------------  ", GetType());
                 });
             }
         }

@@ -4,10 +4,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Microsoft.Plugin.Program.UnitTests")]
+[assembly: InternalsVisibleTo("Microsoft.PowerToys.Run.Plugin.System.UnitTests")]
 
 namespace Wox.Infrastructure
 {
@@ -16,13 +18,6 @@ namespace Wox.Infrastructure
         private readonly MatchOption _defaultMatchOption = new MatchOption();
 
         public SearchPrecisionScore UserSettingSearchPrecision { get; set; }
-
-        private readonly IAlphabet _alphabet;
-
-        public StringMatcher(IAlphabet alphabet = null)
-        {
-            _alphabet = alphabet;
-        }
 
         public static StringMatcher Instance { get; internal set; }
 
@@ -66,17 +61,16 @@ namespace Wox.Infrastructure
                 return new MatchResult(false, UserSettingSearchPrecision);
             }
 
-            query = query.Trim();
-
-            if (_alphabet != null)
+            if (opt == null)
             {
-                query = _alphabet.Translate(query);
-                stringToCompare = _alphabet.Translate(stringToCompare);
+                throw new ArgumentNullException(nameof(opt));
             }
 
-            var fullStringToCompareWithoutCase = opt.IgnoreCase ? stringToCompare.ToLower() : stringToCompare;
+            query = query.Trim();
 
-            var queryWithoutCase = opt.IgnoreCase ? query.ToLower() : query;
+            // Using InvariantCulture since this is internal
+            var fullStringToCompareWithoutCase = opt.IgnoreCase ? stringToCompare.ToUpper(CultureInfo.InvariantCulture) : stringToCompare;
+            var queryWithoutCase = opt.IgnoreCase ? query.ToUpper(CultureInfo.InvariantCulture) : query;
 
             var querySubstrings = queryWithoutCase.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             int currentQuerySubstringIndex = 0;
@@ -102,7 +96,19 @@ namespace Wox.Infrastructure
                     spaceIndices.Add(compareStringIndex);
                 }
 
-                if (fullStringToCompareWithoutCase[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex])
+                bool compareResult;
+                if (opt.IgnoreCase)
+                {
+                    var fullStringToCompare = fullStringToCompareWithoutCase[compareStringIndex].ToString();
+                    var querySubstring = currentQuerySubstring[currentQuerySubstringCharacterIndex].ToString();
+                    compareResult = string.Compare(fullStringToCompare, querySubstring, CultureInfo.CurrentCulture, CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) != 0;
+                }
+                else
+                {
+                    compareResult = fullStringToCompareWithoutCase[compareStringIndex] != currentQuerySubstring[currentQuerySubstringCharacterIndex];
+                }
+
+                if (compareResult)
                 {
                     matchFoundInPreviousLoop = false;
                     continue;
@@ -174,8 +180,8 @@ namespace Wox.Infrastructure
             return new MatchResult(false, UserSettingSearchPrecision);
         }
 
-        // To get the index of the closest space which preceeds the first matching index
-        private int CalculateClosestSpaceIndex(List<int> spaceIndices, int firstMatchIndex)
+        // To get the index of the closest space which precedes the first matching index
+        private static int CalculateClosestSpaceIndex(List<int> spaceIndices, int firstMatchIndex)
         {
             if (spaceIndices.Count == 0)
             {
@@ -256,6 +262,7 @@ namespace Wox.Infrastructure
                 }
             }
 
+            // Using CurrentCultureIgnoreCase since this relates to queries input by user
             if (string.Equals(query, stringToCompare, StringComparison.CurrentCultureIgnoreCase))
             {
                 var bonusForExactMatch = 10;

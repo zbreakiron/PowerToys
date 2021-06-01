@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ManagedCommon;
 using Microsoft.Plugin.WindowWalker.Components;
 using Wox.Plugin;
 
@@ -17,6 +18,10 @@ namespace Microsoft.Plugin.WindowWalker
         private string IconPath { get; set; }
 
         private PluginInitContext Context { get; set; }
+
+        public string Name => Properties.Resources.wox_plugin_windowwalker_plugin_name;
+
+        public string Description => Properties.Resources.wox_plugin_windowwalker_plugin_description;
 
         static Main()
         {
@@ -32,7 +37,7 @@ namespace Microsoft.Plugin.WindowWalker
             }
 
             OpenWindows.Instance.UpdateOpenWindowsList();
-            SearchController.Instance.UpdateSearchText(query.RawQuery).Wait();
+            SearchController.Instance.UpdateSearchText(query.Search).Wait();
 
             return _results.Select(x => new Result()
             {

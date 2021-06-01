@@ -3,18 +3,19 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Reflection;
+using Microsoft.PowerToys.STATestExtension;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PreviewHandlerCommon;
 
-namespace UnitTests_PreviewHandlerCommon
+namespace PreviewHandlerCommonUnitTests
 {
-    [TestClass]
+    [STATestClass]
     public class WebBrowserExtUnitTests : WebBrowserExt
     {
         private const string DISPIDAMBIENTDLCONTROL = "[DISPID=-5512]";
 
         [TestMethod]
-        public void InvokeMember_ShouldSetValidFlags_WhenCalledWithValidDispId()
+        public void InvokeMemberShouldSetValidFlagsWhenCalledWithValidDispId()
         {
             // Arrange
             var extendedSite = CreateWebBrowserSiteBase() as WebBrowserSiteExt;
@@ -37,7 +38,7 @@ namespace UnitTests_PreviewHandlerCommon
         }
 
         [TestMethod]
-        public void InvokeMember_ShouldOnlySetValidFlags_WhenCalledWithValidDispId()
+        public void InvokeMemberShouldOnlySetValidFlagsWhenCalledWithValidDispId()
         {
             // Arrange
             var extendedSite = CreateWebBrowserSiteBase() as WebBrowserSiteExt;

@@ -20,7 +20,7 @@ namespace PowerLauncher.ViewModel
     {
         private readonly object _collectionLock = new object();
 
-        private readonly Settings _settings;
+        private readonly PowerToysRunSettings _settings;
 
         public ResultsViewModel()
         {
@@ -28,7 +28,7 @@ namespace PowerLauncher.ViewModel
             BindingOperations.EnableCollectionSynchronization(Results, _collectionLock);
         }
 
-        public ResultsViewModel(Settings settings)
+        public ResultsViewModel(PowerToysRunSettings settings)
             : this()
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -52,7 +52,20 @@ namespace PowerLauncher.ViewModel
             }
         }
 
-        public int SelectedIndex { get; set; }
+        private int _selectedIndex;
+
+        public int SelectedIndex
+        {
+            get => _selectedIndex;
+            set
+            {
+                if (_selectedIndex != value)
+                {
+                    _selectedIndex = value;
+                    OnPropertyChanged(nameof(SelectedIndex));
+                }
+            }
+        }
 
         private ResultViewModel _selectedItem;
 
@@ -84,7 +97,20 @@ namespace PowerLauncher.ViewModel
 
         public Thickness Margin { get; set; }
 
-        public Visibility Visibility { get; set; } = Visibility.Hidden;
+        private Visibility _visibility = Visibility.Hidden;
+
+        public Visibility Visibility
+        {
+            get => _visibility;
+            set
+            {
+                if (_visibility != value)
+                {
+                    _visibility = value;
+                    OnPropertyChanged(nameof(Visibility));
+                }
+            }
+        }
 
         public ResultCollection Results { get; }
 
@@ -174,7 +200,7 @@ namespace PowerLauncher.ViewModel
             {
                 // Tabbing backwards should highlight the last item of the previous row
                 SelectPrevResult();
-                SelectedItem.SelectLastContextButton();
+                SelectedItem?.SelectLastContextButton();
             }
         }
 

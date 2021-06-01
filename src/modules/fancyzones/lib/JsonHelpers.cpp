@@ -1,9 +1,12 @@
 #include "pch.h"
 
 #include "JsonHelpers.h"
+#include "FancyZonesData.h"
 #include "FancyZonesDataTypes.h"
 #include "trace.h"
 #include "util.h"
+
+#include <common/logger/logger.h>
 
 #include <filesystem>
 #include <optional>
@@ -21,21 +24,28 @@ namespace NonLocalizable
     const wchar_t ColumnsPercentageStr[] = L"columns-percentage";
     const wchar_t ColumnsStr[] = L"columns";
     const wchar_t CustomZoneSetsStr[] = L"custom-zone-sets";
-    const wchar_t DeletedCustomZoneSetsStr[] = L"deleted-custom-zone-sets";
     const wchar_t DeviceIdStr[] = L"device-id";
     const wchar_t DevicesStr[] = L"devices";
     const wchar_t EditorShowSpacingStr[] = L"editor-show-spacing";
     const wchar_t EditorSpacingStr[] = L"editor-spacing";
     const wchar_t EditorZoneCountStr[] = L"editor-zone-count";
+    const wchar_t EditorSensitivityRadiusStr[] = L"editor-sensitivity-radius";
     const wchar_t GridStr[] = L"grid";
     const wchar_t HeightStr[] = L"height";
     const wchar_t HistoryStr[] = L"history";
     const wchar_t InfoStr[] = L"info";
     const wchar_t NameStr[] = L"name";
+    const wchar_t QuickAccessKey[] = L"key";
+    const wchar_t QuickAccessUuid[] = L"uuid";
+    const wchar_t QuickLayoutKeys[] = L"quick-layout-keys";
     const wchar_t RefHeightStr[] = L"ref-height";
     const wchar_t RefWidthStr[] = L"ref-width";
     const wchar_t RowsPercentageStr[] = L"rows-percentage";
     const wchar_t RowsStr[] = L"rows";
+    const wchar_t SensitivityRadius[] = L"sensitivity-radius";
+    const wchar_t ShowSpacing[] = L"show-spacing";
+    const wchar_t Spacing[] = L"spacing";
+    const wchar_t Templates[] = L"templates";
     const wchar_t TypeStr[] = L"type";
     const wchar_t UuidStr[] = L"uuid";
     const wchar_t WidthStr[] = L"width";
@@ -45,6 +55,16 @@ namespace NonLocalizable
     const wchar_t ZoneIndexStr[] = L"zone-index";
     const wchar_t ZoneSetUuidStr[] = L"zoneset-uuid";
     const wchar_t ZonesStr[] = L"zones";
+
+    // Editor arguments
+    const wchar_t Dpi[] = L"dpi";
+    const wchar_t MonitorId[] = L"monitor-id";
+    const wchar_t TopCoordinate[] = L"top-coordinate";
+    const wchar_t LeftCoordinate[] = L"left-coordinate";
+    const wchar_t IsSelected[] = L"is-selected";
+    const wchar_t ProcessId[] = L"process-id";
+    const wchar_t SpanZonesAcrossMonitors[] = L"span-zones-across-monitors";
+    const wchar_t Monitors[] = L"monitors";
 }
 
 namespace
@@ -77,7 +97,7 @@ namespace
         if (json.HasKey(NonLocalizable::ZoneIndexSetStr))
         {
             data.zoneIndexSet = {};
-            for (auto& value : json.GetNamedArray(NonLocalizable::ZoneIndexSetStr))
+            for (const auto& value : json.GetNamedArray(NonLocalizable::ZoneIndexSetStr))
             {
                 data.zoneIndexSet.push_back(static_cast<size_t>(value.GetNumber()));
             }
@@ -124,6 +144,7 @@ namespace JSONHelpers
             zonesJson.Append(zoneJson);
         }
         infoJson.SetNamedValue(NonLocalizable::ZonesStr, zonesJson);
+        infoJson.SetNamedValue(NonLocalizable::SensitivityRadius, json::value(canvasInfo.sensitivityRadius));
         return infoJson;
     }
 
@@ -148,6 +169,8 @@ namespace JSONHelpers
                 FancyZonesDataTypes::CanvasLayoutInfo::Rect zone{ x, y, width, height };
                 info.zones.push_back(zone);
             }
+
+            info.sensitivityRadius = static_cast<int>(infoJson.GetNamedNumber(NonLocalizable::SensitivityRadius, DefaultValues::SensitivityRadius));
             return info;
         }
         catch (const winrt::hresult_error&)
@@ -170,6 +193,10 @@ namespace JSONHelpers
             cellChildMapJson.Append(NumVecToJsonArray(gridInfo.m_cellChildMap[i]));
         }
         infoJson.SetNamedValue(NonLocalizable::CellChildMapStr, cellChildMapJson);
+        
+        infoJson.SetNamedValue(NonLocalizable::SensitivityRadius, json::value(gridInfo.m_sensitivityRadius));
+        infoJson.SetNamedValue(NonLocalizable::ShowSpacing, json::value(gridInfo.m_showSpacing));
+        infoJson.SetNamedValue(NonLocalizable::Spacing, json::value(gridInfo.m_spacing));
 
         return infoJson;
     }
@@ -203,6 +230,10 @@ namespace JSONHelpers
                 }
                 info.cellChildMap().push_back(JsonArrayToNumVec(cellsArray));
             }
+
+            info.m_showSpacing = infoJson.GetNamedBoolean(NonLocalizable::ShowSpacing, DefaultValues::ShowSpacing);
+            info.m_spacing = static_cast<int>(infoJson.GetNamedNumber(NonLocalizable::Spacing, DefaultValues::Spacing));
+            info.m_sensitivityRadius = static_cast<int>(infoJson.GetNamedNumber(NonLocalizable::SensitivityRadius, DefaultValues::SensitivityRadius));
 
             return info;
         }
@@ -404,6 +435,7 @@ namespace JSONHelpers
         result.SetNamedValue(NonLocalizable::EditorShowSpacingStr, json::value(device.data.showSpacing));
         result.SetNamedValue(NonLocalizable::EditorSpacingStr, json::value(device.data.spacing));
         result.SetNamedValue(NonLocalizable::EditorZoneCountStr, json::value(device.data.zoneCount));
+        result.SetNamedValue(NonLocalizable::EditorSensitivityRadiusStr, json::value(device.data.sensitivityRadius));
 
         return result;
     }
@@ -431,8 +463,8 @@ namespace JSONHelpers
 
             result.data.showSpacing = device.GetNamedBoolean(NonLocalizable::EditorShowSpacingStr);
             result.data.spacing = static_cast<int>(device.GetNamedNumber(NonLocalizable::EditorSpacingStr));
-            result.data.zoneCount = static_cast<int>(
-                device.GetNamedNumber(NonLocalizable::EditorZoneCountStr));
+            result.data.zoneCount = static_cast<int>(device.GetNamedNumber(NonLocalizable::EditorZoneCountStr));
+            result.data.sensitivityRadius = static_cast<int>(device.GetNamedNumber(NonLocalizable::EditorSensitivityRadiusStr, DefaultValues::SensitivityRadius));
 
             return result;
         }
@@ -440,6 +472,69 @@ namespace JSONHelpers
         {
             return std::nullopt;
         }
+    }
+
+    json::JsonObject LayoutQuickKeyJSON::ToJson(const LayoutQuickKeyJSON& layoutQuickKey)
+    {
+        json::JsonObject result{};
+
+        result.SetNamedValue(NonLocalizable::QuickAccessUuid, json::value(layoutQuickKey.layoutUuid));
+        result.SetNamedValue(NonLocalizable::QuickAccessKey, json::value(layoutQuickKey.key));
+
+        return result;
+    }
+    
+    std::optional<LayoutQuickKeyJSON> LayoutQuickKeyJSON::FromJson(const json::JsonObject& layoutQuickKey)
+    {
+        try
+        {
+            LayoutQuickKeyJSON result;
+
+            result.layoutUuid = layoutQuickKey.GetNamedString(NonLocalizable::QuickAccessUuid);
+            if (!FancyZonesUtils::IsValidGuid(result.layoutUuid))
+            {
+                return std::nullopt;
+            }
+
+            result.key = static_cast<int>(layoutQuickKey.GetNamedNumber(NonLocalizable::QuickAccessKey));
+            
+            return result;
+        }
+        catch (const winrt::hresult_error&)
+        {
+            return std::nullopt;
+        }
+    }
+
+    json::JsonObject MonitorInfo::ToJson(const MonitorInfo& monitor)
+    {
+        json::JsonObject result{};
+
+        result.SetNamedValue(NonLocalizable::Dpi, json::value(monitor.dpi));
+        result.SetNamedValue(NonLocalizable::MonitorId, json::value(monitor.id));
+        result.SetNamedValue(NonLocalizable::TopCoordinate, json::value(monitor.top));
+        result.SetNamedValue(NonLocalizable::LeftCoordinate, json::value(monitor.left));
+        result.SetNamedValue(NonLocalizable::IsSelected, json::value(monitor.isSelected));
+
+        return result;
+    }
+
+    json::JsonObject EditorArgs::ToJson(const EditorArgs& args)
+    {
+        json::JsonObject result{};
+
+        result.SetNamedValue(NonLocalizable::ProcessId, json::value(args.processId));
+        result.SetNamedValue(NonLocalizable::SpanZonesAcrossMonitors, json::value(args.spanZonesAcrossMonitors));
+
+        json::JsonArray monitors;
+        for (const auto& monitor : args.monitors)
+        {
+            monitors.Append(MonitorInfo::ToJson(monitor));
+        }
+
+        result.SetNamedValue(NonLocalizable::Monitors, monitors);
+
+        return result;
     }
 
     json::JsonObject GetPersistFancyZonesJSON(const std::wstring& zonesSettingsFileName, const std::wstring& appZoneHistoryFileName)
@@ -467,28 +562,48 @@ namespace JSONHelpers
         }
     }
 
-    void SaveFancyZonesData(const std::wstring& zonesSettingsFileName,
-                            const std::wstring& appZoneHistoryFileName,
-                            const TDeviceInfoMap& deviceInfoMap,
-                            const TCustomZoneSetsMap& customZoneSetsMap,
-                            const TAppZoneHistoryMap& appZoneHistoryMap)
-
+    void SaveZoneSettings(const std::wstring& zonesSettingsFileName, const TDeviceInfoMap& deviceInfoMap, const TCustomZoneSetsMap& customZoneSetsMap, const TLayoutQuickKeysMap& quickKeysMap)
     {
-        json::JsonObject root{};
-        json::JsonObject appZoneHistoryRoot{};
+        auto before = json::from_file(zonesSettingsFileName);
 
-        appZoneHistoryRoot.SetNamedValue(NonLocalizable::AppZoneHistoryStr, JSONHelpers::SerializeAppZoneHistory(appZoneHistoryMap));
+        json::JsonObject root{};
+        json::JsonArray templates{};
+
+        try
+        {
+            if (before.has_value() && before->HasKey(NonLocalizable::Templates))
+            {
+                templates = before->GetNamedArray(NonLocalizable::Templates);
+            }
+        }
+        catch (const winrt::hresult_error&)
+        {
+        
+        }
+               
         root.SetNamedValue(NonLocalizable::DevicesStr, JSONHelpers::SerializeDeviceInfos(deviceInfoMap));
         root.SetNamedValue(NonLocalizable::CustomZoneSetsStr, JSONHelpers::SerializeCustomZoneSets(customZoneSetsMap));
-
-        auto before = json::from_file(zonesSettingsFileName);
+        root.SetNamedValue(NonLocalizable::Templates, templates);
+        root.SetNamedValue(NonLocalizable::QuickLayoutKeys, JSONHelpers::SerializeQuickKeys(quickKeysMap));
+        
         if (!before.has_value() || before.value().Stringify() != root.Stringify())
         {
             Trace::FancyZones::DataChanged();
+            json::to_file(zonesSettingsFileName, root);
         }
+    }
 
-        json::to_file(zonesSettingsFileName, root);
-        json::to_file(appZoneHistoryFileName, appZoneHistoryRoot);
+    void SaveAppZoneHistory(const std::wstring& appZoneHistoryFileName, const TAppZoneHistoryMap& appZoneHistoryMap)
+    {
+        json::JsonObject root{};
+
+        root.SetNamedValue(NonLocalizable::AppZoneHistoryStr, JSONHelpers::SerializeAppZoneHistory(appZoneHistoryMap));
+
+        auto before = json::from_file(appZoneHistoryFileName);
+        if (!before.has_value() || before.value().Stringify() != root.Stringify())
+        {
+            json::to_file(appZoneHistoryFileName, root);
+        }
     }
 
     TAppZoneHistoryMap ParseAppZoneHistory(const json::JsonObject& fancyZonesDataJSON)
@@ -556,10 +671,7 @@ namespace JSONHelpers
 
         for (const auto& [deviceID, deviceData] : deviceInfoMap)
         {
-            if (deviceData.activeZoneSet.type != FancyZonesDataTypes::ZoneSetLayoutType::Blank)
-            {
-                DeviceInfosJSON.Append(DeviceInfoJSON::DeviceInfoJSON::ToJson(DeviceInfoJSON{ deviceID, deviceData }));
-            }
+            DeviceInfosJSON.Append(DeviceInfoJSON::DeviceInfoJSON::ToJson(DeviceInfoJSON{ deviceID, deviceData }));
         }
 
         return DeviceInfosJSON;
@@ -599,78 +711,40 @@ namespace JSONHelpers
 
         return customZoneSetsJSON;
     }
-
-    void SerializeDeviceInfoToTmpFile(const JSONHelpers::DeviceInfoJSON& deviceInfo, std::wstring_view tmpFilePath)
+    
+    TLayoutQuickKeysMap ParseQuickKeys(const json::JsonObject& fancyZonesDataJSON)
     {
-        json::JsonObject deviceInfoJson = JSONHelpers::DeviceInfoJSON::ToJson(deviceInfo);
-        json::to_file(tmpFilePath, deviceInfoJson);
-    }
-
-    std::optional<DeviceInfoJSON> ParseDeviceInfoFromTmpFile(std::wstring_view tmpFilePath)
-    {
-        std::optional<DeviceInfoJSON> result{ std::nullopt };
-        if (std::filesystem::exists(tmpFilePath))
+        try
         {
-            if (auto zoneSetJson = json::from_file(tmpFilePath); zoneSetJson.has_value())
+            TLayoutQuickKeysMap quickKeysMap{};
+            auto quickKeys = fancyZonesDataJSON.GetNamedArray(NonLocalizable::QuickLayoutKeys);
+
+            for (uint32_t i = 0; i < quickKeys.Size(); ++i)
             {
-                if (auto deviceInfo = JSONHelpers::DeviceInfoJSON::FromJson(zoneSetJson.value()); deviceInfo.has_value())
+                if (auto quickKey = LayoutQuickKeyJSON::FromJson(quickKeys.GetObjectAt(i)); quickKey.has_value())
                 {
-                    result = std::move(deviceInfo);
+                    quickKeysMap[quickKey->layoutUuid] = std::move(quickKey->key);
                 }
             }
-        }
 
-        DeleteTmpFile(tmpFilePath);
-        return result;
+            return std::move(quickKeysMap);
+        }
+        catch (const winrt::hresult_error& e)
+        {
+            Logger::error(L"Parsing quick keys error: {}", e.message());
+            return {};
+        }
     }
 
-    std::optional<CustomZoneSetJSON> ParseCustomZoneSetFromTmpFile(std::wstring_view tmpFilePath)
+    json::JsonArray SerializeQuickKeys(const TLayoutQuickKeysMap& quickKeysMap)
     {
-        std::optional<CustomZoneSetJSON> result{ std::nullopt };
-        if (std::filesystem::exists(tmpFilePath))
+        json::JsonArray quickKeysJSON{};
+
+        for (const auto& [uuid, key] : quickKeysMap)
         {
-            try
-            {
-                if (auto customZoneSetJson = json::from_file(tmpFilePath); customZoneSetJson.has_value())
-                {
-                    if (auto customZoneSet = JSONHelpers::CustomZoneSetJSON::FromJson(customZoneSetJson.value()); customZoneSet.has_value())
-                    {
-                        result = std::move(customZoneSet);
-                    }
-                }
-            }
-            catch (const winrt::hresult_error&)
-            {
-                result = std::nullopt;
-            }
-
-            DeleteTmpFile(tmpFilePath);
-        }
-        return result;
-    }
-
-    std::vector<std::wstring> ParseDeletedCustomZoneSetsFromTmpFile(std::wstring_view tmpFilePath)
-    {
-        std::vector<std::wstring> result{};
-        if (std::filesystem::exists(tmpFilePath))
-        {
-            auto deletedZoneSetsJson = json::from_file(tmpFilePath);
-            try
-            {
-                auto deletedCustomZoneSets = deletedZoneSetsJson->GetNamedArray(NonLocalizable::DeletedCustomZoneSetsStr);
-                for (auto zoneSet : deletedCustomZoneSets)
-                {
-                    std::wstring uuid = L"{" + std::wstring{ zoneSet.GetString() } + L"}";
-                    result.push_back(uuid);
-                }
-            }
-            catch (const winrt::hresult_error&)
-            {
-            }
-
-            DeleteTmpFile(tmpFilePath);
+            quickKeysJSON.Append(LayoutQuickKeyJSON::ToJson(LayoutQuickKeyJSON{ uuid, key }));
         }
 
-        return result;
+        return quickKeysJSON;
     }
 }

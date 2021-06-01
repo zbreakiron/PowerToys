@@ -16,7 +16,6 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
         private readonly ISearch windowsIndexerSearch;
 
         private const uint _fileAttributeHidden = 0x2;
-        private static readonly Regex _likeRegex = new Regex(@"[^\s(]+\s+LIKE\s+'([^']|'')*'\s+OR\s+", RegexOptions.Compiled);
 
         public WindowsSearchAPI(ISearch windowsIndexerSearch, bool displayHiddenFiles = false)
         {
@@ -24,7 +23,7 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
             DisplayHiddenFiles = displayHiddenFiles;
         }
 
-        public List<SearchResult> ExecuteQuery(ISearchQueryHelper queryHelper, string keyword, bool isFullQuery = false)
+        public List<SearchResult> ExecuteQuery(ISearchQueryHelper queryHelper, string keyword)
         {
             if (queryHelper == null)
             {
@@ -35,17 +34,6 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
 
             // Generate SQL from our parameters, converting the userQuery from AQS->WHERE clause
             string sqlQuery = queryHelper.GenerateSQLFromUserQuery(keyword);
-            var simplifiedQuery = SimplifyQuery(sqlQuery);
-
-            if (!isFullQuery)
-            {
-                sqlQuery = simplifiedQuery;
-            }
-            else if (simplifiedQuery.Equals(sqlQuery, StringComparison.CurrentCultureIgnoreCase))
-            {
-                // if a full query is requested but there is no difference between the queries, return empty results
-                return results;
-            }
 
             // execute the command, which returns the results as an OleDBResults.
             List<OleDBResult> oleDBResults = windowsIndexerSearch.Query(queryHelper.ConnectionString, sqlQuery);
@@ -59,6 +47,7 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
                 }
 
                 // # is URI syntax for the fragment component, need to be encoded so LocalPath returns complete path
+                // Using OrdinalIgnoreCase since this is internal and used with symbols
                 var string_path = ((string)oleDBResult.FieldData[0]).Replace("#", "%23", StringComparison.OrdinalIgnoreCase);
                 var uri_path = new Uri(string_path);
 
@@ -89,10 +78,11 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
             // convert file pattern if it is not '*'. Don't create restriction for '*' as it includes all files.
             if (pattern != "*")
             {
-                pattern = pattern.Replace("*", "%", StringComparison.InvariantCulture);
-                pattern = pattern.Replace("?", "_", StringComparison.InvariantCulture);
+                // Using Ordinal since these are internal and used with symbols
+                pattern = pattern.Replace("*", "%", StringComparison.Ordinal);
+                pattern = pattern.Replace("?", "_", StringComparison.Ordinal);
 
-                if (pattern.Contains("%", StringComparison.InvariantCulture) || pattern.Contains("_", StringComparison.InvariantCulture))
+                if (pattern.Contains("%", StringComparison.Ordinal) || pattern.Contains("_", StringComparison.Ordinal))
                 {
                     queryHelper.QueryWhereRestrictions += " AND System.FileName LIKE '" + pattern + "' ";
                 }
@@ -139,7 +129,7 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
             queryHelper.QuerySorting = "System.DateModified DESC";
         }
 
-        public IEnumerable<SearchResult> Search(string keyword, ISearchManager manager, bool isFullQuery = false, string pattern = "*", int maxCount = 30)
+        public IEnumerable<SearchResult> Search(string keyword, ISearchManager manager, string pattern = "*", int maxCount = 30)
         {
             if (manager == null)
             {
@@ -149,12 +139,7 @@ namespace Microsoft.Plugin.Indexer.SearchHelper
             ISearchQueryHelper queryHelper;
             InitQueryHelper(out queryHelper, manager, maxCount, DisplayHiddenFiles);
             ModifyQueryHelper(ref queryHelper, pattern);
-            return ExecuteQuery(queryHelper, keyword, isFullQuery);
-        }
-
-        public static string SimplifyQuery(string sqlQuery)
-        {
-            return _likeRegex.Replace(sqlQuery, string.Empty);
+            return ExecuteQuery(queryHelper, keyword);
         }
     }
 }

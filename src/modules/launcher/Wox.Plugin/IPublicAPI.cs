@@ -3,6 +3,8 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
+using ManagedCommon;
+using Microsoft.PowerToys.Common.UI;
 
 namespace Wox.Plugin
 {
@@ -71,7 +73,13 @@ namespace Wox.Plugin
         /// <summary>
         /// Get all loaded plugins
         /// </summary>
-        /// <returns></returns>
         List<PluginPair> GetAllPlugins();
+
+        /// <summary>
+        /// Show toast notification
+        /// </summary>
+        /// <param name="text">Notification main text</param>
+        /// <param name="secondaryText">Notification optional text</param>
+        void ShowNotification(string text, string secondaryText = null);
     }
 }

@@ -3,24 +3,25 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Abstractions;
 using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
 using PowerLauncher.Helper;
-using Wox.Infrastructure;
 using Wox.Infrastructure.Image;
-using Wox.Infrastructure.Logger;
+using Wox.Plugin.Logger;
 
 namespace PowerLauncher
 {
     internal partial class ReportWindow
     {
+        private static readonly IFileSystem FileSystem = new FileSystem();
+        private static readonly IFile File = FileSystem.File;
+
         public ReportWindow(Exception exception)
         {
             InitializeComponent();
@@ -38,13 +39,15 @@ namespace PowerLauncher
         {
             string path = Log.CurrentLogDirectory;
             var directory = new DirectoryInfo(path);
-            var log = directory.GetFiles().OrderByDescending(f => f.LastWriteTime).First();
+            var log = directory.GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault();
 
-            LogFilePathBox.Text = log.FullName;
+            LogFilePathBox.Text = log?.FullName;
 
             StringBuilder content = new StringBuilder();
             content.AppendLine(ErrorReporting.RuntimeInfo());
-            content.AppendLine($"Date: {DateTime.Now.ToString(CultureInfo.InvariantCulture)}");
+
+            // Using CurrentCulture since this is displayed to user in the report window
+            content.AppendLine($"Date: {DateTime.Now.ToString(CultureInfo.CurrentCulture)}");
             content.AppendLine("Exception:");
             content.AppendLine(exception.ToString());
             var paragraph = new Paragraph();
@@ -77,12 +80,8 @@ namespace PowerLauncher
 
         private void RepositoryHyperlink_Click(object sender, RoutedEventArgs e)
         {
-            var ps = new ProcessStartInfo((sender as Hyperlink).NavigateUri.ToString())
-            {
-                UseShellExecute = true,
-                Verb = "open",
-            };
-            Process.Start(ps);
+            var uri = (sender as Hyperlink).NavigateUri.ToString();
+            Wox.Infrastructure.Helper.OpenInShell(uri);
         }
     }
 }

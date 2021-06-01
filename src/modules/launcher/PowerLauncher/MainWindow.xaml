@@ -10,8 +10,6 @@
         Topmost="True"
         SizeToContent="Height"
         ResizeMode="NoResize"
-        TextOptions.TextRenderingMode="ClearType"
-        RenderOptions.ClearTypeHint="Enabled"
         WindowStyle="None"
         WindowStartupLocation="Manual"
         AllowDrop="True"
@@ -22,11 +20,9 @@
         Closing="OnClosing"
         Background="Transparent"
         LocationChanged="OnLocationChanged"
-        Activated="OnActivated"
         Deactivated="OnDeactivated"
         IsVisibleChanged="OnVisibilityChanged"
         Visibility="{Binding MainWindowVisibility, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-        
         d:DataContext="{d:DesignInstance vm:MainViewModel}">
     <Window.Resources>
         <CubicEase x:Key="CubicEaseOut" EasingMode="EaseOut"/>
@@ -59,7 +55,12 @@
             x:Name="SearchBoxBorder" 
             Grid.Row="0" 
             Margin="24,24,24,24">
-            <Rectangle Fill="{DynamicResource SystemChromeLow}" RadiusX="4" RadiusY="4" Stroke="{DynamicResource BorderBrush}" StrokeThickness="1">
+            <Rectangle
+                Fill="{DynamicResource SystemChromeLow}"
+                RadiusX="4"
+                RadiusY="4"
+                Stroke="{DynamicResource DialogBorderBrush}"
+                StrokeThickness="1">
                 <Rectangle.Effect>
                     <DropShadowEffect BlurRadius="32" Opacity="0.28" ShadowDepth="1" />
                 </Rectangle.Effect>
@@ -82,7 +83,12 @@
             <!--<Border.RenderTransform>
                 <TranslateTransform />
             </Border.RenderTransform>-->
-            <Rectangle RadiusX="4" RadiusY="4" Fill="{DynamicResource SystemChromeLow}" Stroke="{DynamicResource BorderBrush}" StrokeThickness="1">
+            <Rectangle
+                RadiusX="4"
+                RadiusY="4"
+                Fill="{DynamicResource SystemChromeLow}"
+                Stroke="{DynamicResource DialogBorderBrush}"
+                StrokeThickness="1">
                 <Rectangle.Effect>
                     <DropShadowEffect BlurRadius="32" Opacity="0.28" ShadowDepth="1" />
                 </Rectangle.Effect>
@@ -93,12 +99,20 @@
                     <TranslateTransform />
                 </local:ResultList.RenderTransform>-->
             </local:ResultList>
-            <Rectangle RadiusX="4" RadiusY="4" Stroke="{DynamicResource SystemChromeLow}" StrokeThickness="1" />
+            <Rectangle
+                RadiusX="4"
+                RadiusY="4"
+                Stroke="{DynamicResource DialogBorderBrush}"
+                StrokeThickness="1" />
         </Grid>
     </Grid> 
     <Window.InputBindings>
-        <KeyBinding Key="Escape" Command="{Binding EscCommand}" />
-        <KeyBinding Key="Enter" Command="{Binding OpenResultWithKeyboardCommand}" />
-        <KeyBinding Modifiers="Alt" Key="F4" Command="{Binding IgnoreCommand}" />
+        <KeyBinding Key="Escape"
+                    Command="{Binding EscCommand}" />
+        <KeyBinding Key="Enter"
+                    Command="{Binding OpenResultWithKeyboardCommand}" />
+        <KeyBinding Modifiers="Alt"
+                    Key="F4"
+                    Command="{Binding IgnoreCommand}" />
     </Window.InputBindings>
 </Window>

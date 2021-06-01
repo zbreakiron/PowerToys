@@ -1,19 +1,22 @@
 #include "pch.h"
 #include "restart_elevated.h"
-#include "common/common.h"
+
+#include <common/utils/elevation.h>
 
 enum State
 {
     None,
     RestartAsElevated,
+    RestartAsElevatedOpenSettings,
     RestartAsNonElevated
 };
 static State state = None;
 
-void schedule_restart_as_elevated()
+void schedule_restart_as_elevated(bool openSettings)
 {
-    state = RestartAsElevated;
+    state = openSettings ? RestartAsElevatedOpenSettings : RestartAsElevated;
 }
+
 
 void schedule_restart_as_non_elevated()
 {
@@ -35,6 +38,8 @@ bool restart_if_scheduled()
     {
     case RestartAsElevated:
         return run_elevated(exe_path.get(), {});
+    case RestartAsElevatedOpenSettings:
+        return run_elevated(exe_path.get(), L"--open-settings");
     case RestartAsNonElevated:
         return run_non_elevated(exe_path.get(), L"--dont-elevate", NULL);
     default:

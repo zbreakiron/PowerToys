@@ -8,24 +8,34 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Abstractions;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
-using Microsoft.PowerToys.Settings.UI.Lib;
-using Wox.Infrastructure.Logger;
+using ManagedCommon;
 using Wox.Infrastructure.Storage;
 using Wox.Plugin;
+using Wox.Plugin.Logger;
 using Wox.Plugin.SharedCommands;
 using Control = System.Windows.Controls.Control;
 
 namespace Microsoft.Plugin.Shell
 {
-    public class Main : IPlugin, ISettingProvider, IPluginI18n, IContextMenu, ISavable
+    public class Main : IPlugin, IPluginI18n, IContextMenu, ISavable
     {
+        private static readonly IFileSystem FileSystem = new FileSystem();
+        private static readonly IPath Path = FileSystem.Path;
+        private static readonly IFile File = FileSystem.File;
+        private static readonly IDirectory Directory = FileSystem.Directory;
+
         private readonly ShellPluginSettings _settings;
         private readonly PluginJsonStorage<ShellPluginSettings> _storage;
 
         private string IconPath { get; set; }
+
+        public string Name => Properties.Resources.wox_plugin_cmd_plugin_name;
+
+        public string Description => Properties.Resources.wox_plugin_cmd_plugin_description;
 
         private PluginInitContext _context;
 
@@ -63,12 +73,12 @@ namespace Microsoft.Plugin.Shell
 
                 try
                 {
-                    List<Result> folderPluginResults = Folder.Main.GetFolderPluginResults(query);
+                    IEnumerable<Result> folderPluginResults = Folder.Main.GetFolderPluginResults(query);
                     results.AddRange(folderPluginResults);
                 }
                 catch (Exception e)
                 {
-                    Log.Exception($"|Microsoft.Plugin.Shell.Main.Query|Exception when query for <{query}>", e);
+                    Log.Exception($"Exception when query for <{query}>", e, GetType());
                 }
 
                 return results;
@@ -83,6 +93,7 @@ namespace Microsoft.Plugin.Shell
                 {
                     if (m.Key == cmd)
                     {
+                        // Using CurrentCulture since this is user facing
                         result.SubTitle = Properties.Resources.wox_plugin_cmd_plugin_name + ": " + string.Format(CultureInfo.CurrentCulture, Properties.Resources.wox_plugin_cmd_cmd_has_been_executed_times, m.Value);
                         return null;
                     }
@@ -90,6 +101,8 @@ namespace Microsoft.Plugin.Shell
                     var ret = new Result
                     {
                         Title = m.Key,
+
+                        // Using CurrentCulture since this is user facing
                         SubTitle = Properties.Resources.wox_plugin_cmd_plugin_name + ": " + string.Format(CultureInfo.CurrentCulture, Properties.Resources.wox_plugin_cmd_cmd_has_been_executed_times, m.Value),
                         IcoPath = IconPath,
                         Action = c =>
@@ -127,6 +140,8 @@ namespace Microsoft.Plugin.Shell
                 .Select(m => new Result
                 {
                     Title = m.Key,
+
+                    // Using CurrentCulture since this is user facing
                     SubTitle = Properties.Resources.wox_plugin_cmd_plugin_name + ": " + string.Format(CultureInfo.CurrentCulture, Properties.Resources.wox_plugin_cmd_cmd_has_been_executed_times, m.Value),
                     IcoPath = IconPath,
                     Action = c =>
@@ -140,8 +155,8 @@ namespace Microsoft.Plugin.Shell
 
         private ProcessStartInfo PrepareProcessStartInfo(string command, bool runAsAdministrator = false)
         {
-            command = command.Trim();
-            command = Environment.ExpandEnvironmentVariables(command);
+            string trimmedCommand = command.Trim();
+            command = Environment.ExpandEnvironmentVariables(trimmedCommand);
             var workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var runAsAdministratorArg = !runAsAdministrator && !_settings.RunAsAdministrator ? string.Empty : "runas";
 
@@ -202,7 +217,7 @@ namespace Microsoft.Plugin.Shell
 
             info.UseShellExecute = true;
 
-            _settings.AddCmdHistory(command);
+            _settings.AddCmdHistory(trimmedCommand);
 
             return info;
         }
@@ -318,10 +333,6 @@ namespace Microsoft.Plugin.Shell
             };
 
             return resultlist;
-        }
-
-        public void UpdateSettings(PowerLauncherSettings settings)
-        {
         }
     }
 }

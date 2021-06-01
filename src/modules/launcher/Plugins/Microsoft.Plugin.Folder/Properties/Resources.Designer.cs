@@ -106,7 +106,7 @@ namespace Microsoft.Plugin.Folder.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Showing {0} of {1} results.
+        ///   Looks up a localized string similar to Showing {0:N0} of {1:N0} results.
         /// </summary>
         public static string Microsoft_plugin_folder_truncation_warning_subtitle {
             get {
@@ -124,7 +124,7 @@ namespace Microsoft.Plugin.Folder.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Open favorite folder from PowerToys Run directly.
+        ///   Looks up a localized string similar to Navigates folders starting from a drive letter &apos;C:\&apos; or from the user home &apos;~&apos;..
         /// </summary>
         public static string wox_plugin_folder_plugin_description {
             get {
@@ -138,6 +138,15 @@ namespace Microsoft.Plugin.Folder.Properties {
         public static string wox_plugin_folder_plugin_name {
             get {
                 return ResourceManager.GetString("wox_plugin_folder_plugin_name", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to File: {0}.
+        /// </summary>
+        public static string wox_plugin_folder_select_file_result_subtitle {
+            get {
+                return ResourceManager.GetString("wox_plugin_folder_select_file_result_subtitle", resourceCulture);
             }
         }
         
@@ -165,6 +174,15 @@ namespace Microsoft.Plugin.Folder.Properties {
         public static string wox_plugin_folder_select_folder_OpenFileOrFolder_error_message {
             get {
                 return ResourceManager.GetString("wox_plugin_folder_select_folder_OpenFileOrFolder_error_message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Folder: {0}.
+        /// </summary>
+        public static string wox_plugin_folder_select_folder_result_subtitle {
+            get {
+                return ResourceManager.GetString("wox_plugin_folder_select_folder_result_subtitle", resourceCulture);
             }
         }
     }

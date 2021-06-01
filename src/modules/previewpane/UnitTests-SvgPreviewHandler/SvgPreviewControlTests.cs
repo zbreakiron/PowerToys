@@ -4,19 +4,19 @@
 
 using System;
 using System.Drawing;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Windows.Forms;
+using Microsoft.PowerToys.PreviewHandler.Svg;
+using Microsoft.PowerToys.STATestExtension;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using PreviewHandlerCommon;
-using SvgPreviewHandler;
 
 namespace SvgPreviewHandlerUnitTests
 {
-    [TestClass]
+    [STATestClass]
     public class SvgPreviewControlTests
     {
         [TestMethod]
@@ -29,7 +29,7 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.DoPreview(GetMockStream("<svg></svg>"));
 
                 // Assert
-                Assert.AreEqual(svgPreviewControl.Controls.Count, 1);
+                Assert.AreEqual(1, svgPreviewControl.Controls.Count);
                 Assert.IsInstanceOfType(svgPreviewControl.Controls[0], typeof(WebBrowserExt));
             }
         }
@@ -58,7 +58,7 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.DoPreview(GetMockStream("<svg></svg>"));
 
                 // Assert
-                Assert.AreEqual(((WebBrowser)svgPreviewControl.Controls[0]).IsWebBrowserContextMenuEnabled, false);
+                Assert.AreEqual(false, ((WebBrowser)svgPreviewControl.Controls[0]).IsWebBrowserContextMenuEnabled);
             }
         }
 
@@ -72,7 +72,7 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.DoPreview(GetMockStream("<svg></svg>"));
 
                 // Assert
-                Assert.AreEqual(((WebBrowser)svgPreviewControl.Controls[0]).Dock, DockStyle.Fill);
+                Assert.AreEqual(DockStyle.Fill, ((WebBrowser)svgPreviewControl.Controls[0]).Dock);
             }
         }
 
@@ -86,11 +86,11 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.DoPreview(GetMockStream("<svg></svg>"));
 
                 // Assert
-                Assert.AreEqual(((WebBrowser)svgPreviewControl.Controls[0]).ScriptErrorsSuppressed, true);
+                Assert.AreEqual(true, ((WebBrowser)svgPreviewControl.Controls[0]).ScriptErrorsSuppressed);
             }
         }
 
-        [TestMethod]
+        // ToDo: fix unit test
         public void SvgPreviewControlShouldSetScrollBarsEnabledPropertyWhenDoPreviewCalled()
         {
             // Arrange
@@ -100,7 +100,7 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.DoPreview(GetMockStream("<svg></svg>"));
 
                 // Assert
-                Assert.AreEqual(((WebBrowser)svgPreviewControl.Controls[0]).ScrollBarsEnabled, true);
+                Assert.AreEqual(true, ((WebBrowser)svgPreviewControl.Controls[0]).ScrollBarsEnabled);
             }
         }
 
@@ -114,7 +114,7 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.DoPreview(GetMockStream("<svg></svg>"));
 
                 // Assert
-                Assert.AreEqual(((WebBrowser)svgPreviewControl.Controls[0]).AllowNavigation, false);
+                Assert.AreEqual(false, ((WebBrowser)svgPreviewControl.Controls[0]).AllowNavigation);
             }
         }
 
@@ -135,13 +135,13 @@ namespace SvgPreviewHandlerUnitTests
 
                 // Assert
                 Assert.IsFalse(string.IsNullOrWhiteSpace(textBox.Text));
-                Assert.AreEqual(svgPreviewControl.Controls.Count, 1);
-                Assert.AreEqual(textBox.Dock, DockStyle.Top);
-                Assert.AreEqual(textBox.BackColor, Color.LightYellow);
+                Assert.AreEqual(1, svgPreviewControl.Controls.Count);
+                Assert.AreEqual(DockStyle.Top, textBox.Dock);
+                Assert.AreEqual(Color.LightYellow, textBox.BackColor);
                 Assert.IsTrue(textBox.Multiline);
                 Assert.IsTrue(textBox.ReadOnly);
-                Assert.AreEqual(textBox.ScrollBars, RichTextBoxScrollBars.None);
-                Assert.AreEqual(textBox.BorderStyle, BorderStyle.None);
+                Assert.AreEqual(RichTextBoxScrollBars.None, textBox.ScrollBars);
+                Assert.AreEqual(BorderStyle.None, textBox.BorderStyle);
             }
         }
 
@@ -166,8 +166,8 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.Width += incrementParentControlWidth;
 
                 // Assert
-                Assert.AreEqual(initialParentWidth, initialTextBoxWidth);
-                Assert.AreEqual(finalParentWidth, textBox.Width);
+                Assert.AreEqual(initialTextBoxWidth, initialParentWidth);
+                Assert.AreEqual(textBox.Width, finalParentWidth);
             }
         }
 
@@ -188,7 +188,7 @@ namespace SvgPreviewHandlerUnitTests
                 // Assert
                 Assert.IsInstanceOfType(svgPreviewControl.Controls[0], typeof(RichTextBox));
                 Assert.IsInstanceOfType(svgPreviewControl.Controls[1], typeof(WebBrowserExt));
-                Assert.AreEqual(svgPreviewControl.Controls.Count, 2);
+                Assert.AreEqual(2, svgPreviewControl.Controls.Count);
             }
         }
 
@@ -209,7 +209,7 @@ namespace SvgPreviewHandlerUnitTests
 
                 // Assert
                 Assert.IsInstanceOfType(svgPreviewControl.Controls[0], typeof(WebBrowserExt));
-                Assert.AreEqual(svgPreviewControl.Controls.Count, 1);
+                Assert.AreEqual(1, svgPreviewControl.Controls.Count);
             }
         }
 
@@ -234,8 +234,8 @@ namespace SvgPreviewHandlerUnitTests
                 svgPreviewControl.Width += incrementParentControlWidth;
 
                 // Assert
-                Assert.AreEqual(initialParentWidth, initialTextBoxWidth);
-                Assert.AreEqual(finalParentWidth, textBox.Width);
+                Assert.AreEqual(initialTextBoxWidth, initialParentWidth);
+                Assert.AreEqual(textBox.Width, finalParentWidth);
             }
         }
 

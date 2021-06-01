@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -62,7 +61,7 @@ namespace ImageResizer.Models
             batch.Files.Add("Image1.jpg");
             batch.Files.Add("Image2.jpg");
 
-            var errors = batch.Process(CancellationToken.None, (_, __) => { }).ToList();
+            var errors = batch.Process((_, __) => { }, CancellationToken.None).ToList();
 
             Assert.Equal(2, errors.Count);
 
@@ -89,8 +88,8 @@ namespace ImageResizer.Models
             var calls = new ConcurrentBag<(int i, double count)>();
 
             batch.Process(
-                CancellationToken.None,
-                (i, count) => calls.Add((i, count)));
+                (i, count) => calls.Add((i, count)),
+                CancellationToken.None);
 
             Assert.Equal(2, calls.Count);
             Assert.Contains(calls, c => c.i == 1 && c.count == 2);

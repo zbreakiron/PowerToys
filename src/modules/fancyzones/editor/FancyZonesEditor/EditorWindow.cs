@@ -5,16 +5,15 @@
 using System;
 using System.Windows;
 using FancyZonesEditor.Models;
-using MahApps.Metro.Controls;
 
 namespace FancyZonesEditor
 {
-    public class EditorWindow : MetroWindow
+    public class EditorWindow : Window
     {
         protected void OnSaveApplyTemplate(object sender, RoutedEventArgs e)
         {
-            EditorOverlay mainEditor = EditorOverlay.Current;
-            if (mainEditor.DataContext is LayoutModel model)
+            var mainEditor = App.Overlay;
+            if (mainEditor.CurrentDataContext is LayoutModel model)
             {
                 // If new custom Canvas layout is created (i.e. edited Blank layout),
                 // it's type needs to be updated
@@ -24,29 +23,25 @@ namespace FancyZonesEditor
                 }
 
                 model.Persist();
+
+                MainWindowSettingsModel settings = ((App)Application.Current).MainWindowSettings;
+                settings.SetAppliedModel(model);
+                App.Overlay.SetLayoutSettings(App.Overlay.Monitors[App.Overlay.CurrentDesktop], model);
             }
 
-            LayoutModel.SerializeDeletedCustomZoneSets();
+            App.FancyZonesEditorIO.SerializeZoneSettings();
 
-            _backToLayoutPicker = false;
             Close();
-            EditorOverlay.Current.Close();
         }
 
         protected void OnClosed(object sender, EventArgs e)
         {
-            if (_backToLayoutPicker)
-            {
-                EditorOverlay.Current.ShowLayoutPicker();
-            }
+            App.Overlay.CloseEditor();
         }
 
         protected void OnCancel(object sender, RoutedEventArgs e)
         {
-            _backToLayoutPicker = true;
             Close();
         }
-
-        private bool _backToLayoutPicker = true;
     }
 }

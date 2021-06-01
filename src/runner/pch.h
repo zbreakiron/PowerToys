@@ -24,9 +24,11 @@
 #include <tuple>
 #include <unordered_set>
 #include <string>
+#include <set>
 #include <ProjectTelemetry.h>
 
 #include <winrt/Windows.ApplicationModel.h>
+#include <winrt/Windows.Networking.Connectivity.h>
 #include <winrt/Windows.Storage.h>
 
 #include <wil/resource.h>

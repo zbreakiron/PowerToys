@@ -8,12 +8,14 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using Common.ComInterlop;
+using Microsoft.PowerToys.STATestExtension;
+using Microsoft.PowerToys.ThumbnailHandler.Svg;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
 namespace SvgThumbnailProviderUnitTests
 {
-    [TestClass]
+    [STATestClass]
     public class SvgThumbnailProviderTests
     {
         [TestMethod]
@@ -25,7 +27,7 @@ namespace SvgThumbnailProviderUnitTests
             svgBuilder.AppendLine("\t</circle>");
             svgBuilder.AppendLine("</svg>");
 
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
             Assert.IsTrue(thumbnail != null);
         }
 
@@ -39,7 +41,7 @@ namespace SvgThumbnailProviderUnitTests
             svgBuilder.AppendLine("\t</circle>");
             svgBuilder.AppendLine("</svg>");
 
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
             Assert.IsTrue(thumbnail != null);
         }
 
@@ -49,21 +51,21 @@ namespace SvgThumbnailProviderUnitTests
             var svgBuilder = new StringBuilder();
             svgBuilder.AppendLine("<p>foo</p>");
 
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
             Assert.IsTrue(thumbnail == null);
         }
 
         [TestMethod]
         public void CheckNoSvgEmptyStringShouldReturnNullBitmap()
         {
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(string.Empty, 256);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(string.Empty, 256);
             Assert.IsTrue(thumbnail == null);
         }
 
         [TestMethod]
         public void CheckNoSvgNullStringShouldReturnNullBitmap()
         {
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(null, 256);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(null, 256);
             Assert.IsTrue(thumbnail == null);
         }
 
@@ -71,7 +73,7 @@ namespace SvgThumbnailProviderUnitTests
         public void CheckZeroSizedThumbnailShouldReturnNullBitmap()
         {
             string content = "<svg></svg>";
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(content, 0);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(content, 0);
             Assert.IsTrue(thumbnail == null);
         }
 
@@ -92,7 +94,7 @@ namespace SvgThumbnailProviderUnitTests
             svgBuilder.AppendLine("</body>");
             svgBuilder.AppendLine("</html>");
 
-            Bitmap thumbnail = SvgThumbnailProvider.SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
+            Bitmap thumbnail = SvgThumbnailProvider.GetThumbnail(svgBuilder.ToString(), 256);
             Assert.IsTrue(thumbnail != null);
         }
 
@@ -105,7 +107,7 @@ namespace SvgThumbnailProviderUnitTests
             svgBuilder.AppendLine("</circle>");
             svgBuilder.AppendLine("</svg>");
 
-            SvgThumbnailProvider.SvgThumbnailProvider provider = new SvgThumbnailProvider.SvgThumbnailProvider();
+            SvgThumbnailProvider provider = new SvgThumbnailProvider();
 
             provider.Initialize(GetMockStream(svgBuilder.ToString()), 0);
 
@@ -134,7 +136,7 @@ namespace SvgThumbnailProviderUnitTests
             svgBuilder.AppendLine("</body>");
             svgBuilder.AppendLine("</html>");
 
-            SvgThumbnailProvider.SvgThumbnailProvider provider = new SvgThumbnailProvider.SvgThumbnailProvider();
+            SvgThumbnailProvider provider = new SvgThumbnailProvider();
 
             provider.Initialize(GetMockStream(svgBuilder.ToString()), 0);
 

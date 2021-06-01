@@ -1,10 +1,11 @@
 #include "pch.h"
 #include "Settings.h"
 
-#include <common/json.h>
-#include <common/settings_helpers.h>
+#include <common/utils/json.h>
+#include <common/SettingsAPI/settings_helpers.h>
 #include <filesystem>
 #include <commctrl.h>
+#include <imageresizer\dll\ImageResizerConstants.h>
 
 namespace
 {
@@ -44,7 +45,7 @@ namespace
 
 CSettings::CSettings()
 {
-    std::wstring result = PTSettingsHelper::get_module_save_folder_location(L"ImageResizer");
+    std::wstring result = PTSettingsHelper::get_module_save_folder_location(ImageResizerConstants::ModuleSaveFolderKey);
     jsonFilePath = result + std::wstring(c_imageResizerDataFilePath);
     Load();
 }

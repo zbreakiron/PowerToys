@@ -3,16 +3,24 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
+using System.IO.Abstractions;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Wox.Infrastructure.Logger;
+using Wox.Plugin.Logger;
 
 namespace Wox.Infrastructure
 {
     public static class Helper
     {
+        private static readonly IFileSystem FileSystem = new FileSystem();
+        private static readonly IPath Path = FileSystem.Path;
+        private static readonly IFile File = FileSystem.File;
+        private static readonly IFileInfoFactory FileInfo = FileSystem.FileInfo;
+        private static readonly IDirectory Directory = FileSystem.Directory;
+
         /// <summary>
         /// http://www.yinwang.org/blog-cn/2015/11/21/programming-philosophy
         /// </summary>
@@ -53,8 +61,8 @@ namespace Wox.Infrastructure
                 }
                 else
                 {
-                    var time1 = new FileInfo(bundledDataPath).LastWriteTimeUtc;
-                    var time2 = new FileInfo(dataPath).LastWriteTimeUtc;
+                    var time1 = FileInfo.FromFileName(bundledDataPath).LastWriteTimeUtc;
+                    var time2 = FileInfo.FromFileName(dataPath).LastWriteTimeUtc;
                     if (time1 != time2)
                     {
                         File.Copy(bundledDataPath, dataPath, true);
@@ -79,6 +87,7 @@ namespace Wox.Infrastructure
         }
 
         // Function to run as admin for context menu items
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Suppressing this to enable FxCop. We are logging the exception, and going forward general exceptions should not be caught")]
         public static void RunAsAdmin(string path)
         {
             var info = new ProcessStartInfo
@@ -95,7 +104,7 @@ namespace Wox.Infrastructure
             }
             catch (System.Exception ex)
             {
-                Log.Exception($"Wox.Infrastructure.Helper| Unable to Run {path} as admin : {ex.Message}", ex);
+                Log.Exception($"Unable to Run {path} as admin : {ex.Message}", ex, MethodBase.GetCurrentMethod().DeclaringType);
             }
         }
 
@@ -108,6 +117,34 @@ namespace Wox.Infrastructure
             };
 
             return Process.Start(processStartInfo);
+        }
+
+        public static bool OpenInShell(string path, string arguments = null, string workingDir = null, bool runAsAdmin = false)
+        {
+            using (var process = new Process())
+            {
+                process.StartInfo.FileName = path;
+                process.StartInfo.WorkingDirectory = string.IsNullOrWhiteSpace(workingDir) ? string.Empty : workingDir;
+                process.StartInfo.Arguments = string.IsNullOrWhiteSpace(arguments) ? string.Empty : arguments;
+
+                if (runAsAdmin)
+                {
+                    process.StartInfo.Verb = "RunAs";
+                }
+
+                process.StartInfo.UseShellExecute = true;
+
+                try
+                {
+                    process.Start();
+                    return true;
+                }
+                catch (Win32Exception ex)
+                {
+                    Log.Exception($"Unable to open {path}: {ex.Message}", ex, MethodBase.GetCurrentMethod().DeclaringType);
+                    return false;
+                }
+            }
         }
     }
 }

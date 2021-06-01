@@ -7,10 +7,10 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using System.Windows.Media;
 using PowerLauncher.Helper;
-using Wox.Core.Plugin;
+using PowerLauncher.Plugin;
 using Wox.Infrastructure.Image;
-using Wox.Infrastructure.Logger;
 using Wox.Plugin;
+using Wox.Plugin.Logger;
 
 namespace PowerLauncher.ViewModel
 {
@@ -36,9 +36,35 @@ namespace PowerLauncher.ViewModel
 
         public bool IsHovered { get; set; }
 
-        public bool AreContextButtonsActive { get; set; }
+        private bool _areContextButtonsActive;
 
-        public int ContextMenuSelectedIndex { get; set; }
+        public bool AreContextButtonsActive
+        {
+            get => _areContextButtonsActive;
+            set
+            {
+                if (_areContextButtonsActive != value)
+                {
+                    _areContextButtonsActive = value;
+                    OnPropertyChanged(nameof(AreContextButtonsActive));
+                }
+            }
+        }
+
+        private int _contextMenuSelectedIndex;
+
+        public int ContextMenuSelectedIndex
+        {
+            get => _contextMenuSelectedIndex;
+            set
+            {
+                if (_contextMenuSelectedIndex != value)
+                {
+                    _contextMenuSelectedIndex = value;
+                    OnPropertyChanged(nameof(ContextMenuSelectedIndex));
+                }
+            }
+        }
 
         public const int NoSelectionIndex = -1;
 
@@ -189,7 +215,7 @@ namespace PowerLauncher.ViewModel
                     catch (Exception e)
 #pragma warning restore CA1031 // Do not catch general exception types
                     {
-                        Log.Exception($"|ResultViewModel.Image|IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e);
+                        Log.Exception($"IcoPath is empty and exception when calling Icon() for result <{Result.Title}> of plugin <{Result.PluginDirectory}>", e, GetType());
                         imagePath = ImageLoader.ErrorIconPath;
                     }
                 }

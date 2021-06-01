@@ -1,25 +1,27 @@
 #include "pch.h"
 
-#include <common/common.h>
-#include <common/dpi_aware.h>
-#include <common/on_thread_executor.h>
-#include <common/window_helpers.h>
+#include <common/display/dpi_aware.h>
+#include <common/logger/logger.h>
+#include <common/utils/resources.h>
+#include <common/utils/window.h>
 
 #include "FancyZones.h"
 #include "lib/Settings.h"
 #include "lib/ZoneWindow.h"
 #include "lib/FancyZonesData.h"
 #include "lib/ZoneSet.h"
+#include "lib/FileWatcher.h"
 #include "lib/WindowMoveHandler.h"
 #include "lib/FancyZonesWinHookEventIDs.h"
 #include "lib/util.h"
+#include "on_thread_executor.h"
 #include "trace.h"
 #include "VirtualDesktopUtils.h"
 #include "MonitorWorkAreaHandler.h"
+#include "util.h"
+#include "CallTracer.h"
 
 #include <lib/SecondaryMouseButtonsHook.h>
-
-extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 enum class DisplayChangeType
 {
@@ -32,6 +34,30 @@ enum class DisplayChangeType
 namespace
 {
     constexpr int CUSTOM_POSITIONING_LEFT_TOP_PADDING = 16;
+
+    struct require_read_lock
+    {
+        template<typename T>
+        require_read_lock(const std::shared_lock<T>& lock)
+        {
+            lock;
+        }
+
+        template<typename T>
+        require_read_lock(const std::unique_lock<T>& lock)
+        {
+            lock;
+        }
+    };
+
+    struct require_write_lock
+    {
+        template<typename T>
+        require_write_lock(const std::unique_lock<T>& lock)
+        {
+            lock;
+        }
+    };
 }
 
 // Non-localizable strings
@@ -45,14 +71,19 @@ namespace NonLocalizable
 struct FancyZones : public winrt::implements<FancyZones, IFancyZones, IFancyZonesCallback, IZoneWindowHost>
 {
 public:
-    FancyZones(HINSTANCE hinstance, const winrt::com_ptr<IFancyZonesSettings>& settings) noexcept :
+    FancyZones(HINSTANCE hinstance, const winrt::com_ptr<IFancyZonesSettings>& settings, std::function<void()> disableModuleCallback) noexcept :
         m_hinstance(hinstance),
         m_settings(settings),
         m_windowMoveHandler(settings, [this]() {
             PostMessageW(m_window, WM_PRIV_LOCATIONCHANGE, NULL, NULL);
+        }),
+        m_fileWatcher(FancyZonesDataInstance().GetZonesSettingsFileName(), [this]() {
+            PostMessageW(m_window, WM_PRIV_FILE_UPDATE, NULL, NULL);
         })
     {
         m_settings->SetCallback(this);
+
+        this->disableModuleCallback = std::move(disableModuleCallback);
     }
 
     // IFancyZones
@@ -83,6 +114,7 @@ public:
 
     void MoveSizeEnd(HWND window, POINT const& ptScreen) noexcept
     {
+        _TRACER_;
         std::unique_lock writeLock(m_lock);
         m_windowMoveHandler.MoveSizeEnd(window, ptScreen, m_workAreaHandler.GetWorkAreasByDesktopId(m_currentDesktopId));
     }
@@ -169,41 +201,23 @@ public:
         return m_windowMoveHandler.InMoveSize();
     }
 
+    IFACEMETHODIMP_(Settings::OverlappingZonesAlgorithm)
+    GetOverlappingZonesAlgorithm() noexcept
+    {
+        return m_settings->GetSettings()->overlappingZonesAlgorithm;
+    }
+
     LRESULT WndProc(HWND, UINT, WPARAM, LPARAM) noexcept;
-    void OnDisplayChange(DisplayChangeType changeType) noexcept;
-    void AddZoneWindow(HMONITOR monitor, PCWSTR deviceId) noexcept;
+    void OnDisplayChange(DisplayChangeType changeType, require_write_lock) noexcept;
+    void AddZoneWindow(HMONITOR monitor, const std::wstring& deviceId, require_write_lock) noexcept;
 
 protected:
     static LRESULT CALLBACK s_WndProc(HWND, UINT, WPARAM, LPARAM) noexcept;
 
 private:
-    struct require_read_lock
-    {
-        template<typename T>
-        require_read_lock(const std::shared_lock<T>& lock)
-        {
-            lock;
-        }
 
-        template<typename T>
-        require_read_lock(const std::unique_lock<T>& lock)
-        {
-            lock;
-        }
-    };
-
-    struct require_write_lock
-    {
-        template<typename T>
-        require_write_lock(const std::unique_lock<T>& lock)
-        {
-            lock;
-        }
-    };
-
-    void UpdateZoneWindows() noexcept;
-    void UpdateWindowsPositions() noexcept;
-    void CycleActiveZoneSet(DWORD vkCode) noexcept;
+    void UpdateZoneWindows(require_write_lock) noexcept;
+    void UpdateWindowsPositions(require_write_lock) noexcept;
     bool OnSnapHotkeyBasedOnZoneNumber(HWND window, DWORD vkCode) noexcept;
     bool OnSnapHotkeyBasedOnPosition(HWND window, DWORD vkCode) noexcept;
     bool OnSnapHotkey(DWORD vkCode) noexcept;
@@ -218,11 +232,15 @@ private:
     std::pair<winrt::com_ptr<IZoneWindow>, std::vector<size_t>> GetAppZoneHistoryInfo(HWND window, HMONITOR monitor, bool isPrimaryMonitor) noexcept;
     void MoveWindowIntoZone(HWND window, winrt::com_ptr<IZoneWindow> zoneWindow, const std::vector<size_t>& zoneIndexSet) noexcept;
 
-    void OnEditorExitEvent() noexcept;
+    void OnEditorExitEvent(require_write_lock) noexcept;
+    void UpdateZoneSets(require_write_lock) noexcept;
     bool ShouldProcessSnapHotkey(DWORD vkCode) noexcept;
+    void ApplyQuickLayout(int key) noexcept;
+    void FlashZones(require_write_lock) noexcept;
 
     std::vector<std::pair<HMONITOR, RECT>> GetRawMonitorData() noexcept;
     std::vector<HMONITOR> GetMonitorsSorted() noexcept;
+    HMONITOR WorkAreaKeyFromWindow(HWND window) noexcept;
 
     const HINSTANCE m_hinstance{};
 
@@ -230,6 +248,7 @@ private:
     HWND m_window{};
     WindowMoveHandler m_windowMoveHandler;
     MonitorWorkAreaHandler m_workAreaHandler;
+    FileWatcher m_fileWatcher;
 
     winrt::com_ptr<IFancyZonesSettings> m_settings{};
     GUID m_previousDesktopId{}; // UUID of previously active virtual desktop.
@@ -240,12 +259,17 @@ private:
     OnThreadExecutor m_dpiUnawareThread;
     OnThreadExecutor m_virtualDesktopTrackerThread;
 
+    // If non-recoverable error occurs, trigger disabling of entire FancyZones.
+    static std::function<void()> disableModuleCallback;
+
     static UINT WM_PRIV_VD_INIT; // Scheduled when FancyZones is initialized
     static UINT WM_PRIV_VD_SWITCH; // Scheduled when virtual desktop switch occurs
     static UINT WM_PRIV_VD_UPDATE; // Scheduled on virtual desktops update (creation/deletion)
     static UINT WM_PRIV_EDITOR; // Scheduled when the editor exits
+    static UINT WM_PRIV_FILE_UPDATE; // Scheduled when the a watched file is updated
 
-    static UINT WM_PRIV_LOWLEVELKB; // Scheduled when we receive a key down press
+    static UINT WM_PRIV_SNAP_HOTKEY; // Scheduled when we receive a snap hotkey key down press
+    static UINT WM_PRIV_QUICK_LAYOUT_KEY; // Scheduled when we receive a key down press to quickly apply a layout
 
     // Did we terminate the editor or was it closed cleanly?
     enum class EditorExitKind : byte
@@ -255,11 +279,15 @@ private:
     };
 };
 
+std::function<void()> FancyZones::disableModuleCallback = {};
+
 UINT FancyZones::WM_PRIV_VD_INIT = RegisterWindowMessage(L"{469818a8-00fa-4069-b867-a1da484fcd9a}");
 UINT FancyZones::WM_PRIV_VD_SWITCH = RegisterWindowMessage(L"{128c2cb0-6bdf-493e-abbe-f8705e04aa95}");
 UINT FancyZones::WM_PRIV_VD_UPDATE = RegisterWindowMessage(L"{b8b72b46-f42f-4c26-9e20-29336cf2f22e}");
 UINT FancyZones::WM_PRIV_EDITOR = RegisterWindowMessage(L"{87543824-7080-4e91-9d9c-0404642fc7b6}");
-UINT FancyZones::WM_PRIV_LOWLEVELKB = RegisterWindowMessage(L"{763c03a3-03d9-4cde-8d71-f0358b0b4b52}");
+UINT FancyZones::WM_PRIV_FILE_UPDATE = RegisterWindowMessage(L"{632f17a9-55a7-45f1-a4db-162e39271d92}");
+UINT FancyZones::WM_PRIV_SNAP_HOTKEY = RegisterWindowMessage(L"{763c03a3-03d9-4cde-8d71-f0358b0b4b52}");
+UINT FancyZones::WM_PRIV_QUICK_LAYOUT_KEY = RegisterWindowMessage(L"{72f4fd8e-23f1-43ab-bbbc-029363df9a84}");
 
 // IFancyZones
 IFACEMETHODIMP_(void)
@@ -400,6 +428,7 @@ std::pair<winrt::com_ptr<IZoneWindow>, std::vector<size_t>> FancyZones::GetAppZo
 
 void FancyZones::MoveWindowIntoZone(HWND window, winrt::com_ptr<IZoneWindow> zoneWindow, const std::vector<size_t>& zoneIndexSet) noexcept
 {
+    _TRACER_;
     auto& fancyZonesData = FancyZonesDataInstance();
     if (!fancyZonesData.IsAnotherWindowOfApplicationInstanceZoned(window, zoneWindow->UniqueId()))
     {
@@ -529,37 +558,45 @@ FancyZones::OnKeyDown(PKBDLLHOOKSTRUCT info) noexcept
     bool const ctrl = GetAsyncKeyState(VK_CONTROL) & 0x8000;
     if ((win && !shift && !ctrl) || (win && ctrl && alt))
     {
-        // Temporarily disable Win+Ctrl+Number functionality
-        // if (ctrl)
-        // {
-        //    if ((info->vkCode >= '0') && (info->vkCode <= '9'))
-        //    {
-        //        // Win+Ctrl+Number will cycle through ZoneSets
-        //        Trace::FancyZones::OnKeyDown(info->vkCode, win, ctrl, false /*inMoveSize*/);
-        //        CycleActiveZoneSet(info->vkCode);
-        //        return true;
-        //    }
-        // }
-        // else
         if ((info->vkCode == VK_RIGHT) || (info->vkCode == VK_LEFT) || (info->vkCode == VK_UP) || (info->vkCode == VK_DOWN))
         {
             if (ShouldProcessSnapHotkey(info->vkCode))
             {
                 Trace::FancyZones::OnKeyDown(info->vkCode, win, ctrl, false /*inMoveSize*/);
-                // Win+Left, Win+Right will cycle through Zones in the active ZoneSet when WM_PRIV_LOWLEVELKB's handled
-                PostMessageW(m_window, WM_PRIV_LOWLEVELKB, 0, info->vkCode);
+                // Win+Left, Win+Right will cycle through Zones in the active ZoneSet when WM_PRIV_SNAP_HOTKEY's handled
+                PostMessageW(m_window, WM_PRIV_SNAP_HOTKEY, 0, info->vkCode);
                 return true;
             }
         }
     }
-    // Temporarily disable Win+Ctrl+Number functionality
-    //else if (m_inMoveSize && (info->vkCode >= '0') && (info->vkCode <= '9'))
-    //{
-    //    // This allows you to cycle through ZoneSets while dragging a window
-    //    Trace::FancyZones::OnKeyDown(info->vkCode, win, false /*control*/, true /*inMoveSize*/);
-    //    CycleActiveZoneSet(info->vkCode);
-    //    return false;
-    //}
+
+    if (m_settings->GetSettings()->quickLayoutSwitch)
+    {
+        int digitPressed = -1;
+        if ('0' <= info->vkCode && info->vkCode <= '9')
+        {
+            digitPressed = info->vkCode - '0';
+        }
+        else if (VK_NUMPAD0 <= info->vkCode && info->vkCode <= VK_NUMPAD9)
+        {
+            digitPressed = info->vkCode - VK_NUMPAD0;
+        }
+
+        bool dragging = m_windowMoveHandler.InMoveSize();
+        bool changeLayoutWhileNotDragging = !dragging && !shift && win && ctrl && alt && digitPressed != -1;
+        bool changeLayoutWhileDragging = dragging && digitPressed != -1;
+
+        if (changeLayoutWhileNotDragging || changeLayoutWhileDragging)
+        {
+            auto quickKeysMap = FancyZonesDataInstance().GetLayoutQuickKeys();
+            if (std::any_of(quickKeysMap.begin(), quickKeysMap.end(), [=](auto item) { return item.second == digitPressed; }))
+            {
+                PostMessageW(m_window, WM_PRIV_QUICK_LAYOUT_KEY, 0, static_cast<LPARAM>(digitPressed));
+                Trace::FancyZones::QuickLayoutSwitched(changeLayoutWhileNotDragging);
+                return true;
+            }
+        }
+    }
 
     if (m_windowMoveHandler.IsDragEnabled() && shift)
     {
@@ -571,6 +608,7 @@ FancyZones::OnKeyDown(PKBDLLHOOKSTRUCT info) noexcept
 // IFancyZonesCallback
 void FancyZones::ToggleEditor() noexcept
 {
+    _TRACER_;
     {
         std::shared_lock readLock(m_lock);
         if (m_terminateEditorEvent)
@@ -585,137 +623,121 @@ void FancyZones::ToggleEditor() noexcept
         m_terminateEditorEvent.reset(CreateEvent(nullptr, true, false, nullptr));
     }
 
-    HMONITOR monitor{};
-    HWND foregroundWindow{};
+    std::shared_lock readLock(m_lock);
+
+    HMONITOR targetMonitor{};
 
     const bool use_cursorpos_editor_startupscreen = m_settings->GetSettings()->use_cursorpos_editor_startupscreen;
-    POINT currentCursorPos{};
     if (use_cursorpos_editor_startupscreen)
     {
+        POINT currentCursorPos{};
         GetCursorPos(&currentCursorPos);
-        monitor = MonitorFromPoint(currentCursorPos, MONITOR_DEFAULTTOPRIMARY);
+        targetMonitor = MonitorFromPoint(currentCursorPos, MONITOR_DEFAULTTOPRIMARY);
     }
     else
     {
-        foregroundWindow = GetForegroundWindow();
-        monitor = MonitorFromWindow(foregroundWindow, MONITOR_DEFAULTTOPRIMARY);
+        targetMonitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY);
     }
 
-    if (!monitor)
+    if (!targetMonitor)
     {
         return;
     }
 
-    winrt::com_ptr<IZoneWindow> zoneWindow;
-
-    std::shared_lock readLock(m_lock);
-    
-    if (m_settings->GetSettings()->spanZonesAcrossMonitors)
-    {
-        zoneWindow = m_workAreaHandler.GetWorkArea(m_currentDesktopId, NULL);
-    }
-    else
-    {
-        zoneWindow = m_workAreaHandler.GetWorkArea(m_currentDesktopId, monitor);
-    }
-    
-    if (!zoneWindow)
+    wil::unique_cotaskmem_string virtualDesktopId;
+    if (!SUCCEEDED(StringFromCLSID(m_currentDesktopId, &virtualDesktopId)))
     {
         return;
     }
 
-    std::wstring editorLocation;
+    /*
+    * Divider: /
+    * Parts:
+    * (1) Process id
+    * (2) Span zones across monitors
+    * (3) Monitor id where the Editor should be opened
+    * (4) Monitors count
+    *
+    * Data for each monitor:
+    * (5) Monitor id
+    * (6) DPI
+    * (7) monitor left
+    * (8) monitor top
+    * ...
+    */
+    std::wstring params;
+    const std::wstring divider = L"/";
+    params += std::to_wstring(GetCurrentProcessId()) + divider; /* Process id */
+    const bool spanZonesAcrossMonitors = m_settings->GetSettings()->spanZonesAcrossMonitors;
+    params += std::to_wstring(spanZonesAcrossMonitors) + divider; /* Span zones */
+    std::vector<std::pair<HMONITOR, MONITORINFOEX>> allMonitors;
+    allMonitors = FancyZonesUtils::GetAllMonitorInfo<&MONITORINFOEX::rcWork>();
 
-    if (m_settings->GetSettings()->spanZonesAcrossMonitors)
+    if (spanZonesAcrossMonitors)
     {
-        std::vector<std::pair<HMONITOR, RECT>> allMonitors;
+        params += FancyZonesUtils::GenerateUniqueIdAllMonitorsArea(virtualDesktopId.get()) + divider; /* Monitor id where the Editor should be opened */
+    }
 
-        m_dpiUnawareThread.submit(OnThreadExecutor::task_t{ [&] {
-                              allMonitors = FancyZonesUtils::GetAllMonitorRects<&MONITORINFOEX::rcWork>();
-            } }).wait();
+    // device id map
+    std::unordered_map<std::wstring, DWORD> displayDeviceIdxMap;
 
-        UINT currentDpi = 0;
-        for (const auto& monitor : allMonitors)
+    bool showDpiWarning = false;
+    int prevDpiX = -1, prevDpiY = -1;
+    std::wstring monitorsDataStr;
+    for (auto& monitorData : allMonitors)
+    {
+        HMONITOR monitor = monitorData.first;
+        auto monitorInfo = monitorData.second;
+
+        std::wstring deviceId = FancyZonesUtils::GetDisplayDeviceId(monitorInfo.szDevice, displayDeviceIdxMap);
+        std::wstring monitorId = FancyZonesUtils::GenerateUniqueId(monitor, deviceId, virtualDesktopId.get());
+
+        if (monitor == targetMonitor && !spanZonesAcrossMonitors)
         {
-            UINT dpiX = 0;
-            UINT dpiY = 0;
-            if (GetDpiForMonitor(monitor.first, MDT_EFFECTIVE_DPI, &dpiX, &dpiY) == S_OK)
-            {
-                if (currentDpi == 0)
-                {
-                  currentDpi = dpiX;
-                  continue;
-                }
-                if (currentDpi != dpiX)
-                {
-                    MessageBoxW(NULL,
-                    GET_RESOURCE_STRING(IDS_SPAN_ACROSS_ZONES_WARNING).c_str(),
-                    GET_RESOURCE_STRING(IDS_POWERTOYS_FANCYZONES).c_str(),
-                    MB_OK | MB_ICONWARNING);
-                    break;
-                }
-            }
+            params += monitorId + divider; /* Monitor id where the Editor should be opened */
         }
 
-        for (auto& [monitor, workArea] : allMonitors)
+        monitorsDataStr += std::move(monitorId) + divider; /* Monitor id */
+        UINT dpiX = 0;
+        UINT dpiY = 0;
+        if (GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY) == S_OK)
         {
-            const auto x = workArea.left;
-            const auto y = workArea.top;
-            const auto width = workArea.right - workArea.left;
-            const auto height = workArea.bottom - workArea.top;
-            std::wstring editorLocationPart =
-                std::to_wstring(x) + L"_" +
-                std::to_wstring(y) + L"_" +
-                std::to_wstring(width) + L"_" +
-                std::to_wstring(height);
+            monitorsDataStr += std::to_wstring(dpiX) + divider; /* DPI */
+            if (spanZonesAcrossMonitors && prevDpiX != -1 && (prevDpiX != dpiX || prevDpiY != dpiY))
+            {
+                showDpiWarning = true;
+            }
 
-            if (editorLocation.empty())
-            {
-                editorLocation = std::move(editorLocationPart);
-            }
-            else
-            {
-                editorLocation += L'/';
-                editorLocation += editorLocationPart;
-            }
+            prevDpiX = dpiX;
+            prevDpiY = dpiY;
         }
+
+        monitorsDataStr += std::to_wstring(monitorInfo.rcMonitor.left) + divider; /* Top coordinate */
+        monitorsDataStr += std::to_wstring(monitorInfo.rcMonitor.top) + divider; /* Left coordinate */
     }
-    else
+
+    params += std::to_wstring(allMonitors.size()) + divider; /* Monitors count */
+    params += monitorsDataStr;
+
+    FancyZonesDataInstance().SaveFancyZonesEditorParameters(spanZonesAcrossMonitors, virtualDesktopId.get(), targetMonitor); /* Write parameters to json file */
+
+    if (showDpiWarning)
     {
-        MONITORINFOEX mi;
-        mi.cbSize = sizeof(mi);
-
-        m_dpiUnawareThread.submit(OnThreadExecutor::task_t{ [&] {
-            GetMonitorInfo(monitor, &mi);
-            } }).wait();
-
-        const auto x = mi.rcWork.left;
-        const auto y = mi.rcWork.top;
-        const auto width = mi.rcWork.right - mi.rcWork.left;
-        const auto height = mi.rcWork.bottom - mi.rcWork.top;
-        editorLocation =
-            std::to_wstring(x) + L"_" +
-            std::to_wstring(y) + L"_" +
-            std::to_wstring(width) + L"_" +
-            std::to_wstring(height);
+        // We must show the message box in a separate thread, since this code is called from a low-level
+        // keyboard hook callback, and launching messageboxes from it has unexpected side effects
+        //std::thread{ [] {
+        //    MessageBoxW(nullptr,
+        //                GET_RESOURCE_STRING(IDS_SPAN_ACROSS_ZONES_WARNING).c_str(),
+        //                GET_RESOURCE_STRING(IDS_POWERTOYS_FANCYZONES).c_str(),
+        //                MB_OK | MB_ICONWARNING);
+        //} }.detach();
     }
-
-    const auto& fancyZonesData = FancyZonesDataInstance();
-
-    if (!fancyZonesData.SerializeDeviceInfoToTmpFile(zoneWindow->UniqueId()))
-    {
-        return;
-    }
-
-    const std::wstring params =
-        /*1*/ editorLocation + L" " +
-        /*2*/ L"\"" + std::to_wstring(GetCurrentProcessId()) + L"\"";
 
     SHELLEXECUTEINFO sei{ sizeof(sei) };
     sei.fMask = { SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI };
     sei.lpFile = NonLocalizable::FZEditorExecutablePath;
     sei.lpParameters = params.c_str();
-    sei.nShow = SW_SHOWNORMAL;
+    sei.nShow = SW_SHOWDEFAULT;
     ShellExecuteEx(&sei);
     Trace::FancyZones::EditorLaunched(1);
 
@@ -746,13 +768,16 @@ void FancyZones::ToggleEditor() noexcept
 
 void FancyZones::SettingsChanged() noexcept
 {
+    _TRACER_;
+    std::unique_lock writeLock(m_lock);
+
     // Update the hotkey
     UnregisterHotKey(m_window, 1);
     RegisterHotKey(m_window, 1, m_settings->GetSettings()->editorHotkey.get_modifiers(), m_settings->GetSettings()->editorHotkey.get_code());
 
     // Needed if we toggled spanZonesAcrossMonitors
     m_workAreaHandler.Clear();
-    OnDisplayChange(DisplayChangeType::Initialization);
+    OnDisplayChange(DisplayChangeType::Initialization, writeLock);
 }
 
 // IZoneWindowHost
@@ -761,7 +786,8 @@ FancyZones::MoveWindowsOnActiveZoneSetChange() noexcept
 {
     if (m_settings->GetSettings()->zoneSetChange_moveWindows)
     {
-        UpdateWindowsPositions();
+        std::unique_lock writeLock(m_lock);
+        UpdateWindowsPositions(writeLock);
     }
 }
 
@@ -784,8 +810,9 @@ LRESULT FancyZones::WndProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
         {
             // Changes in taskbar position resulted in different size of work area.
             // Invalidate cached work-areas so they can be recreated with latest information.
+            std::unique_lock writeLock(m_lock);
             m_workAreaHandler.Clear();
-            OnDisplayChange(DisplayChangeType::WorkArea);
+            OnDisplayChange(DisplayChangeType::WorkArea, writeLock);
         }
     }
     break;
@@ -793,8 +820,9 @@ LRESULT FancyZones::WndProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
     case WM_DISPLAYCHANGE:
     {
         // Display resolution changed. Invalidate cached work-areas so they can be recreated with latest information.
+        std::unique_lock writeLock(m_lock);
         m_workAreaHandler.Clear();
-        OnDisplayChange(DisplayChangeType::DisplayChange);
+        OnDisplayChange(DisplayChangeType::DisplayChange, writeLock);
     }
     break;
 
@@ -803,17 +831,19 @@ LRESULT FancyZones::WndProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
         POINT ptScreen;
         GetPhysicalCursorPos(&ptScreen);
 
-        if (message == WM_PRIV_LOWLEVELKB)
+        if (message == WM_PRIV_SNAP_HOTKEY)
         {
             OnSnapHotkey(static_cast<DWORD>(lparam));
         }
         else if (message == WM_PRIV_VD_INIT)
         {
-            OnDisplayChange(DisplayChangeType::Initialization);
+            std::unique_lock writeLock(m_lock);
+            OnDisplayChange(DisplayChangeType::Initialization, writeLock);
         }
         else if (message == WM_PRIV_VD_SWITCH)
         {
-            OnDisplayChange(DisplayChangeType::VirtualDesktop);
+            std::unique_lock writeLock(m_lock);
+            OnDisplayChange(DisplayChangeType::VirtualDesktop, writeLock);
         }
         else if (message == WM_PRIV_VD_UPDATE)
         {
@@ -827,7 +857,8 @@ LRESULT FancyZones::WndProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
         {
             if (lparam == static_cast<LPARAM>(EditorExitKind::Exit))
             {
-                OnEditorExitEvent();
+                std::unique_lock writeLock(m_lock);
+                OnEditorExitEvent(writeLock);
             }
 
             {
@@ -861,6 +892,16 @@ LRESULT FancyZones::WndProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
             auto hwnd = reinterpret_cast<HWND>(wparam);
             WindowCreated(hwnd);
         }
+        else if (message == WM_PRIV_FILE_UPDATE)
+        {
+            FancyZonesDataInstance().LoadFancyZonesData();
+            std::unique_lock writeLock(m_lock);
+            UpdateZoneSets(writeLock);
+        }
+        else if (message == WM_PRIV_QUICK_LAYOUT_KEY)
+        {
+            ApplyQuickLayout(static_cast<int>(lparam));
+        }
         else
         {
             return DefWindowProc(window, message, wparam, lparam);
@@ -871,8 +912,9 @@ LRESULT FancyZones::WndProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
     return 0;
 }
 
-void FancyZones::OnDisplayChange(DisplayChangeType changeType) noexcept
+void FancyZones::OnDisplayChange(DisplayChangeType changeType, require_write_lock lock) noexcept
 {
+    _TRACER_;
     if (changeType == DisplayChangeType::VirtualDesktop ||
         changeType == DisplayChangeType::Initialization)
     {
@@ -897,21 +939,20 @@ void FancyZones::OnDisplayChange(DisplayChangeType changeType) noexcept
         }
     }
 
-    UpdateZoneWindows();
+    UpdateZoneWindows(lock);
 
     if ((changeType == DisplayChangeType::WorkArea) || (changeType == DisplayChangeType::DisplayChange))
     {
         if (m_settings->GetSettings()->displayChange_moveWindows)
         {
-            UpdateWindowsPositions();
+            UpdateWindowsPositions(lock);
         }
     }
 }
 
-void FancyZones::AddZoneWindow(HMONITOR monitor, PCWSTR deviceId) noexcept
+void FancyZones::AddZoneWindow(HMONITOR monitor, const std::wstring& deviceId, require_write_lock) noexcept
 {
-    std::unique_lock writeLock(m_lock);
-
+    _TRACER_;
     if (m_workAreaHandler.IsNewWorkArea(m_currentDesktopId, monitor))
     {
         wil::unique_cotaskmem_string virtualDesktopId;
@@ -921,16 +962,12 @@ void FancyZones::AddZoneWindow(HMONITOR monitor, PCWSTR deviceId) noexcept
 
             if (monitor)
             {
-                uniqueId = ZoneWindowUtils::GenerateUniqueId(monitor, deviceId, virtualDesktopId.get());
+                uniqueId = FancyZonesUtils::GenerateUniqueId(monitor, deviceId, virtualDesktopId.get());
             }
             else
             {
-                uniqueId = ZoneWindowUtils::GenerateUniqueIdAllMonitorsArea(virtualDesktopId.get());
+                uniqueId = FancyZonesUtils::GenerateUniqueIdAllMonitorsArea(virtualDesktopId.get());
             }
-
-            // "Turning FLASHING_ZONE option off"
-            //const bool flash = m_settings->GetSettings()->zoneSetChange_flashZones;
-            const bool flash = false;
 
             std::wstring parentId{};
             auto parentArea = m_workAreaHandler.GetWorkArea(m_previousDesktopId, monitor);
@@ -938,11 +975,11 @@ void FancyZones::AddZoneWindow(HMONITOR monitor, PCWSTR deviceId) noexcept
             {
                 parentId = parentArea->UniqueId();
             }
-            auto workArea = MakeZoneWindow(this, m_hinstance, monitor, uniqueId, parentId, flash);
+            auto workArea = MakeZoneWindow(this, m_hinstance, monitor, uniqueId, parentId);
             if (workArea)
             {
                 m_workAreaHandler.AddWorkArea(m_currentDesktopId, monitor, workArea);
-                FancyZonesDataInstance().SaveFancyZonesData();
+                FancyZonesDataInstance().SaveZoneSettings();
             }
         }
     }
@@ -962,56 +999,43 @@ LRESULT CALLBACK FancyZones::s_WndProc(HWND window, UINT message, WPARAM wparam,
                      DefWindowProc(window, message, wparam, lparam);
 }
 
-void FancyZones::UpdateZoneWindows() noexcept
+void FancyZones::UpdateZoneWindows(require_write_lock lock) noexcept
 {
+    // Mapping between display device name and device index (operating system identifies each display device with an index value).
+    std::unordered_map<std::wstring, DWORD> displayDeviceIdxMap;
+    struct capture
+    {
+        FancyZones* fancyZones;
+        std::unordered_map<std::wstring, DWORD>* displayDeviceIdx;
+        require_write_lock lock;
+    };
+
     auto callback = [](HMONITOR monitor, HDC, RECT*, LPARAM data) -> BOOL {
-        MONITORINFOEX mi;
-        mi.cbSize = sizeof(mi);
-        if (GetMonitorInfo(monitor, &mi))
+        capture* params = reinterpret_cast<capture*>(data);
+        MONITORINFOEX mi{ { .cbSize = sizeof(mi) } };
+        if (GetMonitorInfoW(monitor, &mi))
         {
-            DISPLAY_DEVICE displayDevice = { sizeof(displayDevice) };
-            PCWSTR deviceId = nullptr;
+            auto& displayDeviceIdxMap = *(params->displayDeviceIdx);
+            FancyZones* fancyZones = params->fancyZones;
 
-            bool validMonitor = true;
-            if (EnumDisplayDevices(mi.szDevice, 0, &displayDevice, 1))
-            {
-                if (WI_IsFlagSet(displayDevice.StateFlags, DISPLAY_DEVICE_MIRRORING_DRIVER))
-                {
-                    validMonitor = FALSE;
-                }
-                else if (displayDevice.DeviceID[0] != L'\0')
-                {
-                    deviceId = displayDevice.DeviceID;
-                }
-            }
-
-            if (validMonitor)
-            {
-                if (!deviceId)
-                {
-                    deviceId = GetSystemMetrics(SM_REMOTESESSION) ?
-                                   L"\\\\?\\DISPLAY#REMOTEDISPLAY#" :
-                                   L"\\\\?\\DISPLAY#LOCALDISPLAY#";
-                }
-
-                auto strongThis = reinterpret_cast<FancyZones*>(data);
-                strongThis->AddZoneWindow(monitor, deviceId);
-            }
+            std::wstring deviceId = FancyZonesUtils::GetDisplayDeviceId(mi.szDevice, displayDeviceIdxMap);
+            fancyZones->AddZoneWindow(monitor, deviceId, params->lock);
         }
         return TRUE;
     };
 
     if (m_settings->GetSettings()->spanZonesAcrossMonitors)
     {
-        AddZoneWindow(nullptr, NULL);
+        AddZoneWindow(nullptr, {}, lock);
     }
     else
     {
-        EnumDisplayMonitors(nullptr, nullptr, callback, reinterpret_cast<LPARAM>(this));
+        capture capture{ this, &displayDeviceIdxMap, lock };
+        EnumDisplayMonitors(nullptr, nullptr, callback, reinterpret_cast<LPARAM>(&capture));
     }
 }
 
-void FancyZones::UpdateWindowsPositions() noexcept
+void FancyZones::UpdateWindowsPositions(require_write_lock) noexcept
 {
     auto callback = [](HWND window, LPARAM data) -> BOOL {
         size_t bitmask = reinterpret_cast<size_t>(::GetProp(window, ZonedWindowProperties::PropertyMultipleZoneID));
@@ -1028,7 +1052,6 @@ void FancyZones::UpdateWindowsPositions() noexcept
             }
 
             auto strongThis = reinterpret_cast<FancyZones*>(data);
-            std::unique_lock writeLock(strongThis->m_lock);
             auto zoneWindow = strongThis->m_workAreaHandler.GetWorkArea(window);
             if (zoneWindow)
             {
@@ -1040,37 +1063,10 @@ void FancyZones::UpdateWindowsPositions() noexcept
     EnumWindows(callback, reinterpret_cast<LPARAM>(this));
 }
 
-void FancyZones::CycleActiveZoneSet(DWORD vkCode) noexcept
-{
-    auto window = GetForegroundWindow();
-    if (FancyZonesUtils::IsCandidateForZoning(window, m_settings->GetSettings()->excludedAppsArray))
-    {
-        const HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
-        if (monitor)
-        {
-            std::shared_lock readLock(m_lock);
-
-            auto zoneWindow = m_workAreaHandler.GetWorkArea(m_currentDesktopId, monitor);
-            if (zoneWindow)
-            {
-                zoneWindow->CycleActiveZoneSet(vkCode);
-            }
-        }
-    }
-}
-
 bool FancyZones::OnSnapHotkeyBasedOnZoneNumber(HWND window, DWORD vkCode) noexcept
 {
-    HMONITOR current;
-
-    if (m_settings->GetSettings()->spanZonesAcrossMonitors)
-    {
-        current = NULL;
-    }
-    else
-    {
-        current = MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
-    }
+    _TRACER_;
+    HMONITOR current = WorkAreaKeyFromWindow(window);
 
     std::vector<HMONITOR> monitorInfo = GetMonitorsSorted();
     if (current && monitorInfo.size() > 1 && m_settings->GetSettings()->moveWindowAcrossMonitors)
@@ -1128,16 +1124,7 @@ bool FancyZones::OnSnapHotkeyBasedOnZoneNumber(HWND window, DWORD vkCode) noexce
 
 bool FancyZones::OnSnapHotkeyBasedOnPosition(HWND window, DWORD vkCode) noexcept
 {
-    HMONITOR current;
-
-    if (m_settings->GetSettings()->spanZonesAcrossMonitors)
-    {
-        current = NULL;
-    }
-    else
-    {
-        current = MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
-    }
+    HMONITOR current = WorkAreaKeyFromWindow(window);
 
     auto allMonitors = FancyZonesUtils::GetAllMonitorRects<&MONITORINFOEX::rcWork>();
 
@@ -1165,22 +1152,24 @@ bool FancyZones::OnSnapHotkeyBasedOnPosition(HWND window, DWORD vkCode) noexcept
             else
             {
                 auto workArea = m_workAreaHandler.GetWorkArea(m_currentDesktopId, monitor);
-                auto zoneSet = workArea->ActiveZoneSet();
-                if (zoneSet)
+                if (workArea)
                 {
-                    auto zones = zoneSet->GetZones();
-                    for (size_t i = 0; i < zones.size(); i++)
+                    auto zoneSet = workArea->ActiveZoneSet();
+                    if (zoneSet)
                     {
-                        const auto& zone = zones[i];
-                        RECT zoneRect = zone->GetZoneRect();
+                        const auto zones = zoneSet->GetZones();
+                        for (const auto& [zoneId, zone] : zones)
+                        {
+                            RECT zoneRect = zone->GetZoneRect();
 
-                        zoneRect.left += monitorRect.left;
-                        zoneRect.right += monitorRect.left;
-                        zoneRect.top += monitorRect.top;
-                        zoneRect.bottom += monitorRect.top;
+                            zoneRect.left += monitorRect.left;
+                            zoneRect.right += monitorRect.left;
+                            zoneRect.top += monitorRect.top;
+                            zoneRect.bottom += monitorRect.top;
 
-                        zoneRects.emplace_back(zoneRect);
-                        zoneRectsInfo.emplace_back(i, workArea);
+                            zoneRects.emplace_back(zoneRect);
+                            zoneRectsInfo.emplace_back(zoneId, workArea);
+                        }
                     }
                 }
             }
@@ -1210,22 +1199,24 @@ bool FancyZones::OnSnapHotkeyBasedOnPosition(HWND window, DWORD vkCode) noexcept
         if (currentMonitorRect.top <= currentMonitorRect.bottom)
         {
             auto workArea = m_workAreaHandler.GetWorkArea(m_currentDesktopId, current);
-            auto zoneSet = workArea->ActiveZoneSet();
-            if (zoneSet)
+            if (workArea)
             {
-                auto zones = zoneSet->GetZones();
-                for (size_t i = 0; i < zones.size(); i++)
+                auto zoneSet = workArea->ActiveZoneSet();
+                if (zoneSet)
                 {
-                    const auto& zone = zones[i];
-                    RECT zoneRect = zone->GetZoneRect();
+                    const auto zones = zoneSet->GetZones();
+                    for (const auto& [zoneId, zone] : zones)
+                    {
+                        RECT zoneRect = zone->GetZoneRect();
 
-                    zoneRect.left += currentMonitorRect.left;
-                    zoneRect.right += currentMonitorRect.left;
-                    zoneRect.top += currentMonitorRect.top;
-                    zoneRect.bottom += currentMonitorRect.top;
+                        zoneRect.left += currentMonitorRect.left;
+                        zoneRect.right += currentMonitorRect.left;
+                        zoneRect.top += currentMonitorRect.top;
+                        zoneRect.bottom += currentMonitorRect.top;
 
-                    zoneRects.emplace_back(zoneRect);
-                    zoneRectsInfo.emplace_back(i, workArea);
+                        zoneRects.emplace_back(zoneRect);
+                        zoneRectsInfo.emplace_back(zoneId, workArea);
+                    }
                 }
             }
         }
@@ -1259,17 +1250,15 @@ bool FancyZones::OnSnapHotkeyBasedOnPosition(HWND window, DWORD vkCode) noexcept
 
 bool FancyZones::OnSnapHotkey(DWORD vkCode) noexcept
 {
+    // We already checked in ShouldProcessSnapHotkey whether the foreground window is a candidate for zoning
     auto window = GetForegroundWindow();
-    if (FancyZonesUtils::IsCandidateForZoning(window, m_settings->GetSettings()->excludedAppsArray))
+    if (m_settings->GetSettings()->moveWindowsBasedOnPosition)
     {
-        if (m_settings->GetSettings()->moveWindowsBasedOnPosition)
-        {
-            return OnSnapHotkeyBasedOnPosition(window, vkCode);
-        }
-        else
-        {
-            return (vkCode == VK_LEFT || vkCode == VK_RIGHT) && OnSnapHotkeyBasedOnZoneNumber(window, vkCode);
-        }
+        return OnSnapHotkeyBasedOnPosition(window, vkCode);
+    }
+    else
+    {
+        return (vkCode == VK_LEFT || vkCode == VK_RIGHT) && OnSnapHotkeyBasedOnZoneNumber(window, vkCode);
     }
     return false;
 }
@@ -1289,12 +1278,14 @@ bool FancyZones::ProcessDirectedSnapHotkey(HWND window, DWORD vkCode, bool cycle
 
 void FancyZones::RegisterVirtualDesktopUpdates(std::vector<GUID>& ids) noexcept
 {
+    _TRACER_;
     std::unique_lock writeLock(m_lock);
 
     m_workAreaHandler.RegisterUpdates(ids);
     std::vector<std::wstring> active{};
-    if (VirtualDesktopUtils::GetVirtualDesktopIds(active))
+    if (VirtualDesktopUtils::GetVirtualDesktopIds(active) && !active.empty())
     {
+        FancyZonesDataInstance().UpdatePrimaryDesktopData(active[0]);
         FancyZonesDataInstance().RemoveDeletedDesktops(active);
     }
 }
@@ -1310,37 +1301,34 @@ bool FancyZones::IsSplashScreen(HWND window)
     return wcscmp(NonLocalizable::SplashClassName, className) == 0;
 }
 
-void FancyZones::OnEditorExitEvent() noexcept
+void FancyZones::OnEditorExitEvent(require_write_lock lock) noexcept
 {
     // Collect information about changes in zone layout after editor exited.
-    FancyZonesDataInstance().ParseDataFromTmpFiles();
+    FancyZonesDataInstance().LoadFancyZonesData();
+    UpdateZoneSets(lock);
+}
 
+void FancyZones::UpdateZoneSets(require_write_lock lock) noexcept
+{
     for (auto workArea : m_workAreaHandler.GetAllWorkAreas())
     {
         workArea->UpdateActiveZoneSet();
     }
     if (m_settings->GetSettings()->zoneSetChange_moveWindows)
     {
-        UpdateWindowsPositions();
+        UpdateWindowsPositions(lock);
     }
 }
 
 bool FancyZones::ShouldProcessSnapHotkey(DWORD vkCode) noexcept
 {
-    if (m_settings->GetSettings()->overrideSnapHotkeys)
+    auto window = GetForegroundWindow();
+    if (m_settings->GetSettings()->overrideSnapHotkeys && FancyZonesUtils::IsCandidateForZoning(window, m_settings->GetSettings()->excludedAppsArray))
     {
-        HMONITOR monitor;
-        if (m_settings->GetSettings()->spanZonesAcrossMonitors)
-        {
-            monitor = NULL;
-        }
-        else
-        {
-            monitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONULL);
-        }
-        
+        HMONITOR monitor = WorkAreaKeyFromWindow(window);
+
         auto zoneWindow = m_workAreaHandler.GetWorkArea(m_currentDesktopId, monitor);
-        if (zoneWindow->ActiveZoneSet() != nullptr)
+        if (zoneWindow && zoneWindow->ActiveZoneSet() && zoneWindow->ActiveZoneSet()->LayoutType() != FancyZonesDataTypes::ZoneSetLayoutType::Blank)
         {
             if (vkCode == VK_UP || vkCode == VK_DOWN)
             {
@@ -1353,6 +1341,47 @@ bool FancyZones::ShouldProcessSnapHotkey(DWORD vkCode) noexcept
         }
     }
     return false;
+}
+
+void FancyZones::ApplyQuickLayout(int key) noexcept
+{
+    std::unique_lock writeLock(m_lock);
+
+    std::wstring uuid;
+    for (auto [zoneUuid, hotkey] : FancyZonesDataInstance().GetLayoutQuickKeys())
+    {
+        if (hotkey == key)
+        {
+            uuid = zoneUuid;
+        }
+    }
+
+    auto workArea = m_workAreaHandler.GetWorkAreaFromCursor(m_currentDesktopId);
+
+    // Find a custom zone set with this uuid and apply it
+    auto customZoneSets = FancyZonesDataInstance().GetCustomZoneSetsMap();
+
+    if (!customZoneSets.contains(uuid))
+    {
+        return;
+    }
+
+    FancyZonesDataTypes::ZoneSetData data{ .uuid = uuid, .type = FancyZonesDataTypes::ZoneSetLayoutType::Custom };
+    FancyZonesDataInstance().SetActiveZoneSet(workArea->UniqueId(), data);
+    FancyZonesDataInstance().SaveZoneSettings();
+    UpdateZoneSets(writeLock);
+    FlashZones(writeLock);
+}
+
+void FancyZones::FlashZones(require_write_lock) noexcept
+{
+    if (m_settings->GetSettings()->flashZonesOnQuickSwitch && !m_windowMoveHandler.IsDragEnabled())
+    {
+        for (auto [monitor, workArea] : m_workAreaHandler.GetWorkAreasByDesktopId(m_currentDesktopId))
+        {
+            workArea->FlashZones();
+        }
+    }
 }
 
 std::vector<HMONITOR> FancyZones::GetMonitorsSorted() noexcept
@@ -1368,6 +1397,7 @@ std::vector<HMONITOR> FancyZones::GetMonitorsSorted() noexcept
 
 std::vector<std::pair<HMONITOR, RECT>> FancyZones::GetRawMonitorData() noexcept
 {
+    _TRACER_;
     std::shared_lock readLock(m_lock);
 
     std::vector<std::pair<HMONITOR, RECT>> monitorInfo;
@@ -1385,12 +1415,26 @@ std::vector<std::pair<HMONITOR, RECT>> FancyZones::GetRawMonitorData() noexcept
     return monitorInfo;
 }
 
-winrt::com_ptr<IFancyZones> MakeFancyZones(HINSTANCE hinstance, const winrt::com_ptr<IFancyZonesSettings>& settings) noexcept
+HMONITOR FancyZones::WorkAreaKeyFromWindow(HWND window) noexcept
+{
+    if (m_settings->GetSettings()->spanZonesAcrossMonitors)
+    {
+        return NULL;
+    }
+    else
+    {
+        return MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
+    }
+}
+
+winrt::com_ptr<IFancyZones> MakeFancyZones(HINSTANCE hinstance,
+                                           const winrt::com_ptr<IFancyZonesSettings>& settings,
+                                           std::function<void()> disableCallback) noexcept
 {
     if (!settings)
     {
         return nullptr;
     }
 
-    return winrt::make_self<FancyZones>(hinstance, settings);
+    return winrt::make_self<FancyZones>(hinstance, settings, disableCallback);
 }

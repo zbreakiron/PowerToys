@@ -9,7 +9,8 @@ using System.Windows.Input;
 using ColorPicker.Helpers;
 using ColorPicker.Settings;
 using ColorPicker.Telemetry;
-using Microsoft.PowerToys.Settings.UI.Lib.Utilities;
+using Microsoft.PowerToys.Settings.UI.Library.Enumerations;
+using Microsoft.PowerToys.Settings.UI.Library.Utilities;
 using Microsoft.PowerToys.Telemetry;
 using static ColorPicker.NativeMethods;
 
@@ -20,10 +21,12 @@ namespace ColorPicker.Keyboard
     {
         private readonly AppStateHandler _appStateHandler;
         private readonly IUserSettings _userSettings;
+        private List<string> _previouslyPressedKeys = new List<string>();
 
         private List<string> _activationKeys = new List<string>();
         private GlobalKeyboardHook _keyboardHook;
         private bool disposedValue;
+        private bool _activationShortcutPressed;
 
         [ImportingConstructor]
         public KeyboardMonitor(AppStateHandler appStateHandler, IUserSettings userSettings)
@@ -69,30 +72,45 @@ namespace ColorPicker.Keyboard
             // ESC pressed
             if (virtualCode == KeyInterop.VirtualKeyFromKey(Key.Escape))
             {
-                _appStateHandler.HideColorPicker();
-                PowerToysTelemetry.Log.WriteEvent(new ColorPickerCancelledEvent());
+                e.Handled = _appStateHandler.EndUserSession();
                 return;
             }
 
-            var name = Helper.GetKeyName((uint)virtualCode);
-
-            // If the last key pressed is a modifier key, then currentlyPressedKeys cannot possibly match with _activationKeys
-            // because _activationKeys contains exactly 1 non-modifier key. Hence, there's no need to check if `name` is a
-            // modifier key or to do any additional processing on it.
-
-            // Check pressed modifier keys.
-            AddModifierKeys(currentlyPressedKeys);
-
-            if (e.KeyboardState == GlobalKeyboardHook.KeyboardState.KeyDown || e.KeyboardState == GlobalKeyboardHook.KeyboardState.SysKeyDown)
+            if ((System.Windows.Application.Current as ColorPickerUI.App).IsRunningDetachedFromPowerToys())
             {
-                currentlyPressedKeys.Add(name);
-            }
+                var name = Helper.GetKeyName((uint)virtualCode);
 
-            currentlyPressedKeys.Sort();
+                // If the last key pressed is a modifier key, then currentlyPressedKeys cannot possibly match with _activationKeys
+                // because _activationKeys contains exactly 1 non-modifier key. Hence, there's no need to check if `name` is a
+                // modifier key or to do any additional processing on it.
+                if (e.KeyboardState == GlobalKeyboardHook.KeyboardState.KeyDown || e.KeyboardState == GlobalKeyboardHook.KeyboardState.SysKeyDown)
+                {
+                    // Check pressed modifier keys.
+                    AddModifierKeys(currentlyPressedKeys);
 
-            if (ArraysAreSame(currentlyPressedKeys, _activationKeys))
-            {
-                _appStateHandler.ShowColorPicker();
+                    currentlyPressedKeys.Add(name);
+                }
+
+                currentlyPressedKeys.Sort();
+
+                if (currentlyPressedKeys.Count == 0 && _previouslyPressedKeys.Count != 0)
+                {
+                    // no keys pressed, we can enable activation shortcut again
+                    _activationShortcutPressed = false;
+                }
+
+                _previouslyPressedKeys = currentlyPressedKeys;
+
+                if (ArraysAreSame(currentlyPressedKeys, _activationKeys))
+                {
+                    // avoid triggering this action multiple times as this will be called nonstop while keys are pressed
+                    if (!_activationShortcutPressed)
+                    {
+                        _activationShortcutPressed = true;
+
+                        _appStateHandler.StartUserSession();
+                    }
+                }
             }
         }
 

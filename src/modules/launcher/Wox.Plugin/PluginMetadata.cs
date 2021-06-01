@@ -4,7 +4,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.IO.Abstractions;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace Wox.Plugin
@@ -12,7 +13,14 @@ namespace Wox.Plugin
     [JsonObject(MemberSerialization.OptOut)]
     public class PluginMetadata : BaseModel
     {
+        private static readonly IFileSystem FileSystem = new FileSystem();
+        private static readonly IPath Path = FileSystem.Path;
+
         private string _pluginDirectory;
+
+        public PluginMetadata()
+        {
+        }
 
         public string ID { get; set; }
 
@@ -23,8 +31,6 @@ namespace Wox.Plugin
         public string Version { get; set; }
 
         public string Language { get; set; }
-
-        public string Description { get; set; }
 
         public string Website { get; set; }
 
@@ -45,23 +51,21 @@ namespace Wox.Plugin
             {
                 _pluginDirectory = value;
                 ExecuteFilePath = Path.Combine(value, ExecuteFileName);
-                IcoPath = Path.Combine(value, IcoPath);
             }
         }
 
         public string ActionKeyword { get; set; }
 
-        public List<string> ActionKeywords { get; set; }
+        public bool IsGlobal { get; set; }
 
-        public string IcoPath { get; set; }
+        public string IcoPathDark { get; set; }
+
+        public string IcoPathLight { get; set; }
 
         public override string ToString()
         {
             return Name;
         }
-
-        [Obsolete("Use IcoPath")]
-        public string FullIcoPath => IcoPath;
 
         /// <summary>
         /// Gets or sets init time include both plugin load time and init time

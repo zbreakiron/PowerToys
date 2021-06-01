@@ -14,7 +14,8 @@ enum PowerRenameFlags
     ExtensionOnly = 0x100,
     Uppercase = 0x200,
     Lowercase = 0x400,
-    Titlecase = 0x800
+    Titlecase = 0x800,
+    Capitalized = 0x1000
 };
 
 enum PowerRenameFilters
@@ -31,6 +32,7 @@ public:
     IFACEMETHOD(OnSearchTermChanged)(_In_ PCWSTR searchTerm) = 0;
     IFACEMETHOD(OnReplaceTermChanged)(_In_ PCWSTR replaceTerm) = 0;
     IFACEMETHOD(OnFlagsChanged)(_In_ DWORD flags) = 0;
+    IFACEMETHOD(OnFileTimeChanged)(_In_ SYSTEMTIME fileTime) = 0;
 };
 
 interface __declspec(uuid("E3ED45B5-9CE0-47E2-A595-67EB950B9B72")) IPowerRenameRegEx : public IUnknown
@@ -44,6 +46,8 @@ public:
     IFACEMETHOD(PutReplaceTerm)(_In_ PCWSTR replaceTerm) = 0;
     IFACEMETHOD(GetFlags)(_Out_ DWORD* flags) = 0;
     IFACEMETHOD(PutFlags)(_In_ DWORD flags) = 0;
+    IFACEMETHOD(PutFileTime)(_In_ SYSTEMTIME fileTime) = 0;
+    IFACEMETHOD(ResetFileTime)() = 0;
     IFACEMETHOD(Replace)(_In_ PCWSTR source, _Outptr_ PWSTR* result) = 0;
 };
 
@@ -51,7 +55,7 @@ interface __declspec(uuid("C7F59201-4DE1-4855-A3A2-26FC3279C8A5")) IPowerRenameI
 {
 public:
     IFACEMETHOD(GetPath)(_Outptr_ PWSTR* path) = 0;
-    IFACEMETHOD(GetDate)(_Outptr_ SYSTEMTIME* date) = 0;
+    IFACEMETHOD(GetTime)(_Outptr_ SYSTEMTIME* time) = 0;
     IFACEMETHOD(GetShellItem)(_Outptr_ IShellItem** ppsi) = 0;
     IFACEMETHOD(GetOriginalName)(_Outptr_ PWSTR* originalName) = 0;
     IFACEMETHOD(GetNewName)(_Outptr_ PWSTR* newName) = 0;
@@ -131,3 +135,9 @@ public:
     IFACEMETHOD(AddMRUString)(_In_ PCWSTR entry) = 0;
 };
 
+interface __declspec(uuid("CE8C8616-C1A8-457A-9601-10570F5B9F1F")) IPowerRenameEnum : public IUnknown
+{
+public:
+    IFACEMETHOD(Start)() = 0;
+    IFACEMETHOD(Cancel)() = 0;
+};

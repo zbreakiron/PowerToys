@@ -11,6 +11,7 @@ namespace ColorPicker.Helpers
     [Export(typeof(IThrottledActionInvoker))]
     public sealed class ThrottledActionInvoker : IThrottledActionInvoker
     {
+        private object _invokerLock = new object();
         private Action _actionToRun;
 
         private DispatcherTimer _timer;
@@ -21,22 +22,29 @@ namespace ColorPicker.Helpers
             _timer.Tick += Timer_Tick;
         }
 
-        public void ScheduleAction(Action action, int miliseconds)
+        public void ScheduleAction(Action action, int milliseconds)
         {
-            if (_timer.IsEnabled)
+            lock (_invokerLock)
             {
-                _timer.Stop();
+                if (_timer.IsEnabled)
+                {
+                    _timer.Stop();
+                }
+
+                _actionToRun = action;
+                _timer.Interval = new TimeSpan(0, 0, 0, 0, milliseconds);
+
+                _timer.Start();
             }
-
-            _actionToRun = action;
-            _timer.Interval = new TimeSpan(0, 0, 0, 0, miliseconds);
-
-            _timer.Start();
         }
 
         private void Timer_Tick(object sender, EventArgs e)
         {
-            _actionToRun.Invoke();
+            lock (_invokerLock)
+            {
+                _timer.Stop();
+                _actionToRun.Invoke();
+            }
         }
     }
 }

@@ -133,8 +133,11 @@ Please select from the options above to show items.</value>
   <data name="Entireitemname" xml:space="preserve">
     <value>Item Name and Extension</value>
   </data>
-  <data name="Countslabelfmt" xml:space="preserve">
-    <value>Items Selected: %u | Renaming: %u</value>
+  <data name="Countslabelselectedfmt" xml:space="preserve">
+    <value>Items Selected: %u</value>
+  </data>
+  <data name="Countslabelrenamingfmt" xml:space="preserve">
+    <value>Items Renaming: %u</value>
   </data>
   <data name="Use_Regex" xml:space="preserve">
     <value>Use Regular Expressions</value>
@@ -172,6 +175,9 @@ Please select from the options above to show items.</value>
   <data name="Make_Titlecase" xml:space="preserve">
     <value>Make Titlecase</value>
   </data>
+  <data name="Make_Capitalized" xml:space="preserve">
+    <value>Make Capitalized</value>
+  </data>
   <data name="Rename_Button" xml:space="preserve">
     <value>&amp;Rename</value>
   </data>
@@ -188,7 +194,10 @@ Please select from the options above to show items.</value>
     <value>Replace with:</value>
   </data>
   <data name="Items_Selected" xml:space="preserve">
-    <value>Items Selected: 0 | Renaming: 0</value>
+    <value>Items Selected: 0</value>
+  </data>
+  <data name="Items_Renaming" xml:space="preserve">
+    <value>Items Renaming: 0</value>
   </data>
   <data name="Options" xml:space="preserve">
     <value>Options</value>
@@ -198,5 +207,11 @@ Please select from the options above to show items.</value>
   </data>
   <data name="Rename_Criteria" xml:space="preserve">
     <value>Enter the criteria below to rename the items</value>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Loading...</value>
+  </data>
+  <data name="Loading_Msg" xml:space="preserve">
+    <value>Please wait while the selected items are enumerated.</value>
   </data>
 </root>

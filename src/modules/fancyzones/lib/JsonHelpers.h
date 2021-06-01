@@ -2,7 +2,7 @@
 
 #include "FancyZonesDataTypes.h"
 
-#include <common/json.h>
+#include <common/utils/json.h>
 
 #include <string>
 #include <vector>
@@ -31,7 +31,7 @@ namespace JSONHelpers
         static std::optional<CustomZoneSetJSON> FromJson(const json::JsonObject& customZoneSet);
     };
 
-	namespace ZoneSetDataJSON
+    namespace ZoneSetDataJSON
     {
         json::JsonObject ToJson(const FancyZonesDataTypes::ZoneSetData& zoneSet);
         std::optional<FancyZonesDataTypes::ZoneSetData> FromJson(const json::JsonObject& zoneSet);
@@ -46,7 +46,6 @@ namespace JSONHelpers
         static std::optional<AppZoneHistoryJSON> FromJson(const json::JsonObject& zoneSet);
     };
 
-
     struct DeviceInfoJSON
     {
         std::wstring deviceId;
@@ -56,16 +55,44 @@ namespace JSONHelpers
         static std::optional<DeviceInfoJSON> FromJson(const json::JsonObject& device);
     };
 
+    struct LayoutQuickKeyJSON
+    {
+        std::wstring layoutUuid;
+        int key;
+
+        static json::JsonObject ToJson(const LayoutQuickKeyJSON& device);
+        static std::optional<LayoutQuickKeyJSON> FromJson(const json::JsonObject& device);
+    };
+
     using TAppZoneHistoryMap = std::unordered_map<std::wstring, std::vector<FancyZonesDataTypes::AppZoneHistoryData>>;
     using TDeviceInfoMap = std::unordered_map<std::wstring, FancyZonesDataTypes::DeviceInfoData>;
     using TCustomZoneSetsMap = std::unordered_map<std::wstring, FancyZonesDataTypes::CustomZoneSetData>;
+    using TLayoutQuickKeysMap = std::unordered_map<std::wstring, int>;
+
+    struct MonitorInfo
+    {
+        int dpi;
+        std::wstring id;
+        int top;
+        int left;
+        bool isSelected = false;
+
+        static json::JsonObject ToJson(const MonitorInfo& monitor);
+    };
+    
+    struct EditorArgs
+    {
+        DWORD processId;
+        bool spanZonesAcrossMonitors;
+        std::vector<MonitorInfo> monitors;
+
+        static json::JsonObject ToJson(const EditorArgs& args);
+    };
 
     json::JsonObject GetPersistFancyZonesJSON(const std::wstring& zonesSettingsFileName, const std::wstring& appZoneHistoryFileName);
-    void SaveFancyZonesData(const std::wstring& zonesSettingsFileName,
-							const std::wstring& appZoneHistoryFileName,
-							const TDeviceInfoMap& deviceInfoMap,
-							const TCustomZoneSetsMap& customZoneSetsMap,
-							const TAppZoneHistoryMap& appZoneHistoryMap);
+
+    void SaveZoneSettings(const std::wstring& zonesSettingsFileName, const TDeviceInfoMap& deviceInfoMap, const TCustomZoneSetsMap& customZoneSetsMap, const TLayoutQuickKeysMap& quickKeysMap);
+    void SaveAppZoneHistory(const std::wstring& appZoneHistoryFileName, const TAppZoneHistoryMap& appZoneHistoryMap);
 
     TAppZoneHistoryMap ParseAppZoneHistory(const json::JsonObject& fancyZonesDataJSON);
     json::JsonArray SerializeAppZoneHistory(const TAppZoneHistoryMap& appZoneHistoryMap);
@@ -76,8 +103,6 @@ namespace JSONHelpers
     TCustomZoneSetsMap ParseCustomZoneSets(const json::JsonObject& fancyZonesDataJSON);
     json::JsonArray SerializeCustomZoneSets(const TCustomZoneSetsMap& customZoneSetsMap);
 
-    void SerializeDeviceInfoToTmpFile(const JSONHelpers::DeviceInfoJSON& deviceInfo, std::wstring_view tmpFilePath);
-    std::optional<DeviceInfoJSON> ParseDeviceInfoFromTmpFile(std::wstring_view tmpFilePath);
-    std::optional<CustomZoneSetJSON> ParseCustomZoneSetFromTmpFile(std::wstring_view tmpFilePath);
-    std::vector<std::wstring> ParseDeletedCustomZoneSetsFromTmpFile(std::wstring_view tmpFilePath);
+    TLayoutQuickKeysMap ParseQuickKeys(const json::JsonObject& fancyZonesDataJSON);
+    json::JsonArray SerializeQuickKeys(const TLayoutQuickKeysMap& quickKeysMap);
 }

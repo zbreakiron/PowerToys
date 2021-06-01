@@ -1,6 +1,6 @@
 #pragma once
 
-#include <common/settings_objects.h>
+#include <common/SettingsAPI/settings_objects.h>
 
 // Zoned window properties are not localized.
 namespace ZonedWindowProperties
@@ -12,8 +12,17 @@ namespace ZonedWindowProperties
     const wchar_t MultiMonitorDeviceID[]    = L"FancyZones#MultiMonitorDevice";
 }
 
+// in reality, this file needs to be kept in sync currently with src/settings-ui/Microsoft.PowerToys.Settings.UI.Library/FZConfigProperties.cs
 struct Settings
 {
+    enum struct OverlappingZonesAlgorithm : int
+    {
+        Smallest = 0,
+        Largest = 1,
+        Positional = 2,
+        EnumElements = 3, // number of elements in the enum, not counting this
+    };
+
     // The values specified here are the defaults.
     bool shiftDrag = true;
     bool mouseSwitch = false;
@@ -26,15 +35,18 @@ struct Settings
     bool appLastZone_moveWindows = false;
     bool openWindowOnActiveMonitor = false;
     bool restoreSize = false;
+    bool quickLayoutSwitch = true;
+    bool flashZonesOnQuickSwitch = true;
     bool use_cursorpos_editor_startupscreen = true;
     bool showZonesOnAllMonitors = false;
     bool spanZonesAcrossMonitors = false;
     bool makeDraggedWindowTransparent = true;
-    std::wstring zoneColor = L"#F5FCFF";
+    std::wstring zoneColor = L"#AACDFF";
     std::wstring zoneBorderColor = L"#FFFFFF";
     std::wstring zoneHighlightColor = L"#008CFF";
     int zoneHighlightOpacity = 50;
-    PowerToysSettings::HotkeyObject editorHotkey = PowerToysSettings::HotkeyObject::from_settings(true, false, false, false, VK_OEM_3);
+    OverlappingZonesAlgorithm overlappingZonesAlgorithm = OverlappingZonesAlgorithm::Smallest;
+    PowerToysSettings::HotkeyObject editorHotkey = PowerToysSettings::HotkeyObject::from_settings(true, false, false, true, VK_OEM_3);
     std::wstring excludedApps = L"";
     std::vector<std::wstring> excludedAppsArray;
 };
@@ -49,4 +61,4 @@ interface __declspec(uuid("{BA4E77C4-6F44-4C5D-93D3-CBDE880495C2}")) IFancyZones
     IFACEMETHOD_(const Settings*, GetSettings)() const = 0;
 };
 
-winrt::com_ptr<IFancyZonesSettings> MakeFancyZonesSettings(HINSTANCE hinstance, PCWSTR config) noexcept;
+winrt::com_ptr<IFancyZonesSettings> MakeFancyZonesSettings(HINSTANCE hinstance, PCWSTR name, PCWSTR key) noexcept;
